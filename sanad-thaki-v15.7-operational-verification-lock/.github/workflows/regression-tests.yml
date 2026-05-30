@@ -1,0 +1,54 @@
+name: sanad-regression-tests
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  unit-and-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sanad_test
+          POSTGRES_USER: sanad_app
+          POSTGRES_PASSWORD: sanad_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sanad_app -d sanad_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      APP_PORT: 3901
+      DATABASE_URL: postgresql://sanad_app:sanad_test_password@127.0.0.1:5432/sanad_test
+      JWT_SECRET: github_actions_jwt_secret_64_chars_minimum_for_sanad_thaki_regression_suite_2026
+      REFRESH_TOKEN_SECRET: github_actions_refresh_secret_64_chars_minimum_for_sanad_thaki_regression_suite_2026
+      DEFAULT_TENANT_KMS_KEY: github_actions_default_tenant_kms_key_64_chars_minimum_for_crypto_regression_suite
+      REQUIRE_DATABASE_PER_TENANT: "false"
+      REQUIRE_TENANT_KMS: "false"
+      ENFORCE_HTTPS: "false"
+      CORS_ORIGIN: http://127.0.0.1,http://localhost
+      DISABLE_INVOICE_QUEUE_WORKER: "true"
+      RATE_LIMIT_GLOBAL_PER_MINUTE: "10000"
+      RATE_LIMIT_LOGIN_PER_15_MIN: "10000"
+      RATE_LIMIT_WEBHOOK_PER_MINUTE: "10000"
+      RATE_LIMIT_BANK_UPLOAD_PER_MINUTE: "10000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm install --no-audit --no-fund
+      - name: Run unit tests
+        working-directory: apps/api
+        run: npm run test:unit
+      - name: Run full integration regression cycle
+        working-directory: apps/api
+        run: npm run test:integration

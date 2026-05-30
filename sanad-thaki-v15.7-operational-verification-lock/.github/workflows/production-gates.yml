@@ -1,0 +1,40 @@
+name: sanad-production-gates
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  production-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/api/package-lock.json
+      - name: Install locked API dependencies
+        working-directory: apps/api
+        run: npm ci --omit=optional --ignore-scripts
+      - name: Node syntax check
+        run: |
+          find apps/api/src apps/api/scripts -type f \( -name "*.js" -o -name "*.mjs" \) -print0 | xargs -0 -n1 node --check
+      - name: Unit tests
+        working-directory: apps/api
+        run: npm test
+      - name: Authentication gate
+        working-directory: apps/api
+        run: node scripts/authentication-gate-guard.mjs
+      - name: Security hardening gate
+        working-directory: apps/api
+        run: node scripts/security-hardening-guard.mjs
+      - name: Tenant production gate
+        working-directory: apps/api
+        run: node scripts/tenant-isolation-production-gate.mjs
+      - name: Migration drift gate
+        working-directory: apps/api
+        run: node scripts/migration-drift-guard.mjs
+      - name: Docker compose syntax
+        run: docker compose -f docker-compose.production.yml config >/tmp/sanad-compose.yml

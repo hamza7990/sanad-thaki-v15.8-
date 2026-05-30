@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+.pnpm-store/
+.npm/
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+
+# runtime/customer data
+uploads/
+invoices/
+bank-statements/
+backups/
+exports/
+*.sqlite
+*.db
+
+# build/logs
+dist/
+build/
+coverage/
+logs/
+*.log
+
+# local/package artifacts
+*.zip
+.DS_Store

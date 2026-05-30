@@ -1,0 +1,17 @@
+# Use this file only when TLS terminates at AWS ALB / external Load Balancer.
+# Caddy listens internally without issuing certificates and forwards X-Forwarded-Proto from the LB.
+:80 {
+  encode zstd gzip
+  reverse_proxy api:3000 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {header.X-Forwarded-Proto}
+  }
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    Permissions-Policy "geolocation=(), microphone=(), camera=()"
+  }
+}

@@ -1,0 +1,6 @@
+73894efc0fed5d7b2de3b3cc52e6791d9bc672385f71d003b099fe32843ef1af  apps/api/src/server.js
+975069b4b7ded57595945642f78c3f38b9ae25b49b996ddda6c99d265c429bb7  docker-compose.production.yml
+53b1a852a934701d0ebe31788a919e23a1b9ef1135f052a019ea9633e1933b6e  apps/api/scripts/live-production-acceptance.mjs
+f278756fb66b6441750c34cc2025c8ddb7f0288cd142c4b7a4f23b5506fdcd02  ops/backup-control-db.sh
+9d73ae56192b9875d7f9b3d874a0208198ffc5d338cda1ff2b7e7e070e3b165b  ops/backup-tenant-db.sh
+09f93cfe5b59e3a4cc1f5d079cf70801fe47b46c7e8561ffc1da317d05589516  ops/restore-tenant-db-to-new-database.sh

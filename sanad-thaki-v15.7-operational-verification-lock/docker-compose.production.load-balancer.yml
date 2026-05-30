@@ -1,0 +1,9 @@
+# Override for AWS ALB / external Load Balancer TLS termination.
+# Usage:
+#   docker compose -f docker-compose.production.yml -f docker-compose.production.load-balancer.yml up -d --build
+services:
+  caddy:
+    ports:
+      - "8080:80"
+    volumes:
+      - ./infra/caddy/Caddyfile.load-balancer:/etc/caddy/Caddyfile:ro

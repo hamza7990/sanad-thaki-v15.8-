@@ -1,0 +1,18 @@
+{
+  "version": "v15.8-bank-grade-security-lock",
+  "artifact": "sanad-thaki-v15.8-bank-grade-security-lock.zip",
+  "scope": "Bank-grade security closure after WhatsApp/accounting/CFO features: SSRF protection, mandatory Meta webhook signatures, no legacy direct WhatsApp sender, template platform approval, accounting import limiter, CFO export audit.",
+  "acceptance": [
+    "npm test pass",
+    "authentication/security/tenant/migration guards pass",
+    "npm audit production vulnerabilities = 0",
+    "local /health/live returns 200 and /health/ready returns controlled 503 without crash when infra is absent"
+  ],
+  "not_proven_in_sandbox": [
+    "Live Meta WhatsApp send/status webhook",
+    "Live BSP provider endpoint",
+    "Live Qoyod/Daftara/Odoo/Zoho API credentials",
+    "Live RDS/Secrets Manager/Redis staging",
+    "External penetration test"
+  ]
+}

@@ -1,0 +1,22 @@
+name: Sanad Thaki Security Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Static security check
+        run: node scripts/security-check.mjs
+      - name: Release check
+        run: node scripts/release-check.mjs
+      - name: Core regression guard
+        run: node scripts/core-regression-guard.mjs

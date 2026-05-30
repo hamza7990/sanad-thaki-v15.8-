@@ -1,0 +1,58 @@
+name: Deploy Staging to EC2
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: "Release name for /opt/sanad-thaki/releases"
+        required: false
+        default: "commercial-launch-candidate"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Security check
+        run: node scripts/security-check.mjs
+
+      - name: Release check
+        run: node scripts/release-check.mjs
+
+      - name: Core regression guard
+        run: node scripts/core-regression-guard.mjs
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/sanad_staging_key
+          chmod 600 ~/.ssh/sanad_staging_key
+          ssh-keyscan -H "${{ secrets.STAGING_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Create release archive
+        run: |
+          tar --exclude='.git' --exclude='node_modules' --exclude='.env' --exclude='uploads' --exclude='backups' --exclude='invoices' -czf /tmp/sanad-release.tgz .
+
+      - name: Upload release to EC2
+        run: |
+          RELEASE_NAME="${{ github.event.inputs.release_name }}-${{ github.sha }}"
+          ssh -i ~/.ssh/sanad_staging_key "${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}" "sudo mkdir -p /opt/sanad-thaki/releases/$RELEASE_NAME /opt/sanad-thaki/shared && sudo chown -R ${{ secrets.STAGING_USER }}:${{ secrets.STAGING_USER }} /opt/sanad-thaki"
+          scp -i ~/.ssh/sanad_staging_key /tmp/sanad-release.tgz "${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}:/opt/sanad-thaki/releases/$RELEASE_NAME/sanad-release.tgz"
+          ssh -i ~/.ssh/sanad_staging_key "${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}" "cd /opt/sanad-thaki/releases/$RELEASE_NAME && tar -xzf sanad-release.tgz && rm sanad-release.tgz && ln -sfn /opt/sanad-thaki/releases/$RELEASE_NAME /opt/sanad-thaki/current"
+
+      - name: Install env file securely
+        run: |
+          printf '%s' "${{ secrets.STAGING_ENV_FILE }}" > /tmp/sanad.env
+          scp -i ~/.ssh/sanad_staging_key /tmp/sanad.env "${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}:/opt/sanad-thaki/shared/.env"
+          rm -f /tmp/sanad.env
+
+      - name: Deploy on EC2
+        run: |
+          ssh -i ~/.ssh/sanad_staging_key "${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}" "cd /opt/sanad-thaki/current && chmod +x ops/ec2/*.sh && APP_DIR=/opt/sanad-thaki/current SHARED_DIR=/opt/sanad-thaki/shared ./ops/ec2/install-docker.sh && APP_DIR=/opt/sanad-thaki/current SHARED_DIR=/opt/sanad-thaki/shared ./ops/ec2/run-release.sh"

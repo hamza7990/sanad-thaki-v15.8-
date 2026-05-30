@@ -1,0 +1,35 @@
+{
+  "version": "v15.2-live-operations-lock",
+  "lockName": "SANAD-THAKI-CORE-PROTECTION-LOCK",
+  "purpose": "Protect the core workflows of Sanad Thaki from regression during UI, RBAC, package, operator dashboard, or future feature changes.",
+  "nonNegotiableRule": "No release is acceptable if any protected workflow is removed, hidden, converted to a fake button, or degraded.",
+  "protectedWorkflows": [
+    "invoice_upload_and_reading",
+    "manual_invoice_correction",
+    "submit_invoice_for_review",
+    "cfo_invoice_approval_rejection",
+    "whatsapp_after_approval_and_plan_eligibility_only",
+    "bank_statement_or_transaction_upload",
+    "payment_matching",
+    "tenant_company_isolation",
+    "role_based_permissions",
+    "package_entitlement_enforcement",
+    "audit_logging",
+    "support_ticket_company_isolation",
+    "backup_restore_scripts",
+    "login_session_flow"
+  ],
+  "releaseGate": {
+    "requiredScripts": [
+      "node scripts/security-check.mjs",
+      "node scripts/release-check.mjs",
+      "node scripts/core-regression-guard.mjs",
+      "node --check apps/api/src/server.js",
+      "node --check apps/api/public/app.js"
+    ],
+    "failureRule": "If the core regression guard fails, the release must be rejected even if UI/security/release checks pass."
+  },
+  "sallaIntegration": "enabled",
+  "updatedAt": "2026-05-29T08:13:47.995Z",
+  "liveOperationsLock": true
+}

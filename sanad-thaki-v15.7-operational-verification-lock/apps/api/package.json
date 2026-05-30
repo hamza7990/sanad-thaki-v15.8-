@@ -1,0 +1,49 @@
+{
+  "name": "sanad-thaki-api-production-runtime-lock",
+  "version": "15.8.0-bank-grade-security-lock",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "seed:demo": "node scripts/seed-demo-user.mjs",
+    "seed:platform-admin": "node scripts/seed-platform-admin.mjs",
+    "migrate": "node scripts/migrate-db.mjs",
+    "guard:core": "node ../../scripts/core-regression-guard.mjs",
+    "guard:isolation": "node scripts/company-isolation-static-guard.mjs",
+    "worker:invoices": "node src/server.js",
+    "guard:tenant-production": "node scripts/tenant-isolation-production-gate.mjs",
+    "guard:security-hardening": "node scripts/security-hardening-guard.mjs",
+    "guard:auth": "node scripts/authentication-gate-guard.mjs",
+    "test": "npm run test:unit",
+    "test:unit": "node --test tests/unit/*.test.mjs",
+    "test:integration": "node tests/run-integration-enabled.mjs",
+    "test:full": "npm run test:unit && npm run test:integration",
+    "preflight:production": "node scripts/production-preflight.mjs",
+    "guard:migration-drift": "node scripts/migration-drift-guard.mjs",
+    "acceptance:live": "node scripts/live-production-acceptance.mjs",
+    "acceptance:db-per-tenant": "node scripts/production-db-per-tenant-acceptance.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "csv-parse": "^5.5.6",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "nodemailer": "^8.0.9",
+    "pg": "^8.12.0",
+    "xlsx": "npm:@e965/xlsx@^0.20.3",
+    "zod": "^3.23.8",
+    "ioredis": "^5.4.1",
+    "rate-limit-redis": "^4.2.0"
+  },
+  "optionalDependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.600.0",
+    "@google-cloud/documentai": "^9.3.0",
+    "@techstark/opencv-js": "^4.10.0-release.1",
+    "jsqr": "^1.4.0",
+    "sharp": "^0.33.5"
+  }
+}
