@@ -271,6 +271,13 @@ export const apiService = {
     return http<void>(`/users/${userId}/archive`, { method: 'PATCH' });
   },
 
+  updateUser(userId: string, data: { name?: string; role?: User['role'] }) {
+    return http<User>(`/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
   // ── Invoices ─────────────────────────────────────────────────
 
   async getInvoices(params?: InvoiceListParams) {

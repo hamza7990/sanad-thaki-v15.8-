@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Users, UserPlus, UserX, UserCheck, ShieldAlert,
-  Mail, Shield, RefreshCw, Trash2
+  Mail, Shield, RefreshCw, Trash2, Edit2
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button, Badge, Card, CardContent, Modal, Input, Select, EmptyState } from '@/components/ui';
@@ -21,6 +21,8 @@ export default function TeamPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Invite form state
@@ -29,6 +31,12 @@ export default function TeamPage() {
     email: '',
     role: 'MEMBER' as UserRole,
     password: ''
+  });
+
+  // Edit form state
+  const [editForm, setEditForm] = useState({
+    name: '',
+    role: 'MEMBER' as UserRole
   });
 
   const fetchUsers = useCallback(async () => {
@@ -79,6 +87,41 @@ export default function TeamPage() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'فشل إرسال الدعوة للمستخدم';
       notify.error('خطأ في إرسال الدعوة', message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleOpenEdit = (user: User) => {
+    setEditingUser(user);
+    setEditForm({
+      name: user.name,
+      role: user.role
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    if (!editForm.name.trim()) {
+      notify.error('خطأ', 'الاسم الكامل مطلوب');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await apiService.updateUser(editingUser.id, {
+        name: editForm.name.trim(),
+        role: editForm.role
+      });
+      notify.success('تم تعديل البيانات', 'تم تحديث صلاحيات وبيانات الموظف بنجاح');
+      setShowEditModal(false);
+      setEditingUser(null);
+      fetchUsers();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'فشل تعديل بيانات المستخدم';
+      notify.error('خطأ في التعديل', message);
     } finally {
       setSubmitting(false);
     }
@@ -227,6 +270,7 @@ export default function TeamPage() {
       accessor: (user: User) => {
         const isSelf = currentUser?.id === user.id;
         const isOwner = currentUser?.role === 'OWNER';
+        const canManage = isOwner || (currentUser?.role === 'ADMIN' && user.role !== 'OWNER');
 
         return (
           <div className="flex items-center gap-1.5 justify-end">
@@ -238,6 +282,17 @@ export default function TeamPage() {
                 title="إعادة إرسال الدعوة"
               >
                 <RefreshCw size={14} className="text-content-secondary" />
+              </Button>
+            )}
+
+            {!isSelf && canManage && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleOpenEdit(user)}
+                title="تعديل الصلاحيات والبيانات"
+              >
+                <Edit2 size={14} className="text-content-secondary" />
               </Button>
             )}
             
@@ -379,6 +434,78 @@ export default function TeamPage() {
               loading={submitting}
             >
               إرسال الدعوة
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit User Modal */}
+      <Modal
+        open={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingUser(null);
+        }}
+        title="تعديل صلاحيات وبيانات الموظف"
+      >
+        <form onSubmit={handleEdit} className="flex flex-col gap-4">
+          <Input
+            label="الاسم الكامل"
+            type="text"
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            placeholder="أدخل الاسم الكامل"
+            required
+            disabled={submitting}
+          />
+
+          <Input
+            label="البريد الإلكتروني للعمل"
+            type="email"
+            value={editingUser?.email || ''}
+            disabled
+          />
+
+          <Select
+            label="الدور الصلاحيات"
+            value={editForm.role}
+            onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })}
+            options={[
+              { value: 'MEMBER', label: 'عضو المنصة (صلاحيات أساسية)' },
+              { value: 'ADMIN', label: 'مدير النظام (إدارة المستخدمين والإعدادات)' },
+              { value: 'FINANCE_MANAGER', label: 'مدير مالي (اعتمادات مالية ومطابقة بنكية)' },
+              { value: 'ACCOUNTANT', label: 'محاسب (رفع الفواتير وإرسال رسائل التذكير)' }
+            ]}
+            disabled={submitting}
+          />
+
+          {editForm.role === 'ADMIN' && (
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-warning-50 border border-warning-200">
+              <ShieldAlert className="text-warning-600 shrink-0 mt-0.5" size={16} />
+              <p className="text-xs text-warning-700">
+                تحذير: سيحصل هذا المستخدم على صلاحيات واسعة لإدارة المنشأة واستدعاء الفريق، باستثناء عمليات الدفع وإلغاء الاشتراك وحذف المنشأة.
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 mt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setShowEditModal(false);
+                setEditingUser(null);
+              }}
+              disabled={submitting}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={submitting}
+            >
+              حفظ التعديلات
             </Button>
           </div>
         </form>

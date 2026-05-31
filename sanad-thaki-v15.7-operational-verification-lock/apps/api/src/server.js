@@ -1872,6 +1872,74 @@ app.patch(
   }
 );
 
+app.patch(
+  "/users/:id",
+  authRequired,
+  requirePermission(Permissions.USERS_MANAGE),
+  async (req, res) => {
+    const schema = z.object({
+      name: z.string().min(2).max(120).optional(),
+      role: z.enum(["OWNER", "ADMIN", "MEMBER", "FINANCE_MANAGER", "ACCOUNTANT"]).optional()
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "بيانات التحديث غير صحيحة", details: parsed.error.issues });
+
+    if (req.params.id === req.user.id && parsed.data.role) {
+      return res.status(400).json({ error: "لا يمكنك تغيير صلاحيات حسابك الحالي بنفسك" });
+    }
+
+    try {
+      const result = await withTenant(req.companyId, async client => {
+        const existing = await client.query("SELECT id, role FROM app_users WHERE id=$1 AND company_id=$2", [req.params.id, req.companyId]);
+        if (!existing.rows[0]) return null;
+        
+        if (existing.rows[0].role === "OWNER" && parsed.data.role && parsed.data.role !== "OWNER") {
+          const owners = await client.query("SELECT count(*) FROM app_users WHERE company_id=$1 AND role='OWNER' AND is_active=true", [req.companyId]);
+          if (Number(owners.rows[0].count) <= 1) {
+            throw new Error("CANNOT_REMOVE_LAST_OWNER");
+          }
+        }
+
+        const updates = [];
+        const values = [];
+        let index = 1;
+
+        if (parsed.data.name !== undefined) {
+          updates.push(`name=$${index++}`);
+          values.push(parsed.data.name);
+        }
+        if (parsed.data.role !== undefined) {
+          updates.push(`role=$${index++}`);
+          values.push(parsed.data.role);
+        }
+
+        if (updates.length === 0) return existing.rows[0];
+
+        values.push(req.params.id);
+        values.push(req.companyId);
+
+        const user = await client.query(
+          `UPDATE app_users 
+           SET ${updates.join(", ")}, updated_at=now()
+           WHERE id=$${index++} AND company_id=$${index++}
+           RETURNING id, name, email, role, is_active, user_status`,
+          values
+        );
+        await writeAudit(client, req, "UPDATE_USER_DETAILS", "app_user", req.params.id, parsed.data);
+        return user.rows[0];
+      });
+
+      if (!result) return res.status(404).json({ error: "المستخدم غير موجود" });
+      res.json({ user: result });
+    } catch (err) {
+      if (err.message === "CANNOT_REMOVE_LAST_OWNER") {
+        return res.status(400).json({ error: "لا يمكن تعديل دور المالك الرئيسي للمنشأة لعدم وجود ملاك آخرين نشطين" });
+      }
+      return handleDbError(err, res);
+    }
+  }
+);
+
 app.post("/auth/change-password", authRequired, async (req, res) => {
   const schema = z.object({ currentPassword: z.string().min(8), newPassword: z.string().min(12) });
   const parsed = schema.safeParse(req.body);
