@@ -749,7 +749,13 @@ async function rebuildTenantRollup(companyId) {
 
 async function rebuildAllTenantRollups() {
   const rows = [];
-  for (const tenantId of await listReadyTenantIds()) rows.push(await rebuildTenantRollup(tenantId));
+  for (const tenantId of await listReadyTenantIds()) {
+    try {
+      rows.push(await rebuildTenantRollup(tenantId));
+    } catch (err) {
+      console.error(`Commercial maintenance: failed to rebuild rollup for tenant ${tenantId}:`, err.message);
+    }
+  }
   return rows;
 }
 
@@ -1388,7 +1394,7 @@ app.patch(
         [req.params.id, parsed.data.status]
       ));
       await withPlatformScope(client => client.query(
-        `UPDATE tenant_registry SET provision_status=CASE WHEN $2 IN ('SUSPENDED','CANCELLED') THEN 'DISABLED' ELSE 'READY' END, updated_at=now() WHERE company_id=$1`,
+        `UPDATE tenant_registry SET provision_status=CASE WHEN $2 IN ('SUSPENDED','CANCELLED') THEN 'DISABLED' ELSE 'READY' END, updated_at=now() WHERE company_id=$1 AND provision_status IN ('READY', 'DISABLED')`,
         [req.params.id, parsed.data.status]
       ));
     } catch (err) {
@@ -2315,20 +2321,24 @@ async function runInvoiceQueueWorkerOnce() {
     // In Database-per-Tenant mode the worker must poll each tenant database, not the shared platform pool.
     if (tenantIds.length > 0) {
       for (const tenantId of tenantIds) {
-        await withTenant(tenantId, async tenantClient => {
-          const candidates = await tenantClient.query(
-            `SELECT id, company_id, created_by
-             FROM invoice_processing_jobs
-             WHERE company_id=$1 AND status='QUEUED' AND attempts < 3
-             ORDER BY created_at ASC
-             LIMIT 5`,
-            [tenantId]
-          );
-          for (const job of candidates.rows) {
-            try { await processInvoiceJob(job); }
-            catch (err) { console.error("Invoice background job failed:", job.id, err.message); }
-          }
-        });
+        try {
+          await withTenant(tenantId, async tenantClient => {
+            const candidates = await tenantClient.query(
+              `SELECT id, company_id, created_by
+               FROM invoice_processing_jobs
+               WHERE company_id=$1 AND status='QUEUED' AND attempts < 3
+               ORDER BY created_at ASC
+               LIMIT 5`,
+              [tenantId]
+            );
+            for (const job of candidates.rows) {
+              try { await processInvoiceJob(job); }
+              catch (err) { console.error("Invoice background job failed:", job.id, err.message); }
+            }
+          });
+        } catch (err) {
+          console.error(`Invoice queue worker tenant ${tenantId} processing failed:`, err.message);
+        }
       }
       return;
     }
