@@ -7,6 +7,7 @@
     "start": "node src/server.js",
     "seed:demo": "node scripts/seed-demo-user.mjs",
     "seed:platform-admin": "node scripts/seed-platform-admin.mjs",
+    "seed:production-demo": "node scripts/seed-production-demo-users.mjs",
     "migrate": "node scripts/migrate-db.mjs",
     "guard:core": "node ../../scripts/core-regression-guard.mjs",
     "guard:isolation": "node scripts/company-isolation-static-guard.mjs",
