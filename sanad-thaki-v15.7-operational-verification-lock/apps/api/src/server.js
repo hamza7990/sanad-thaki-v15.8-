@@ -1872,13 +1872,39 @@ app.patch(
   }
 );
 
-app.post("/auth/change-password", authRequired, tenantRequired, async (req, res) => {
+app.post("/auth/change-password", authRequired, async (req, res) => {
   const schema = z.object({ currentPassword: z.string().min(8), newPassword: z.string().min(12) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "بيانات كلمة المرور غير صحيحة", details: parsed.error.issues });
-  if (!req.companyId) return res.status(403).json({ error: "تغيير كلمة المرور من هذه الصفحة لمستخدمي الشركات فقط" });
 
   try {
+    if (req.isPlatformAdmin) {
+      const result = await withPlatformScope(async client => {
+        const existing = await client.query(
+          "SELECT id, password_hash FROM platform_admins WHERE id=$1 AND is_active=true",
+          [req.user.id]
+        );
+        const admin = existing.rows[0];
+        if (!admin) return { error: "NOT_FOUND" };
+        const ok = await bcrypt.compare(parsed.data.currentPassword, admin.password_hash);
+        if (!ok) return { error: "BAD_PASSWORD" };
+        const hash = await bcrypt.hash(parsed.data.newPassword, 12);
+        await client.query(
+          "UPDATE platform_admins SET password_hash=$2 WHERE id=$1",
+          [req.user.id, hash]
+        );
+        await writePlatformAudit(client, req, "CHANGE_PLATFORM_ADMIN_PASSWORD", "platform_admin", req.user.id);
+        return { ok: true };
+      });
+      
+      if (result.error === "BAD_PASSWORD") return res.status(401).json({ error: "كلمة المرور الحالية غير صحيحة" });
+      if (result.error === "NOT_FOUND") return res.status(404).json({ error: "المستخدم غير موجود" });
+      return res.json({ ok: true, message: "تم تغيير كلمة المرور بنجاح." });
+    }
+
+    // Tenant user password change
+    if (!req.companyId) return res.status(403).json({ error: "تغيير كلمة المرور من هذه الصفحة لمستخدمي الشركات فقط" });
+
     const result = await withTenant(req.companyId, async client => {
       const existing = await client.query(
         "SELECT id, password_hash, password_must_change, invite_expires_at FROM app_users WHERE id=$1 AND company_id=$2 AND is_active=true AND coalesce(user_status,'ACTIVE') <> 'ARCHIVED'",
@@ -1897,6 +1923,7 @@ app.post("/auth/change-password", authRequired, tenantRequired, async (req, res)
       await writeAudit(client, req, "CHANGE_FIRST_LOGIN_PASSWORD", "app_user", req.user.id);
       return { ok: true };
     });
+
     if (result.error === "EXPIRED") return res.status(403).json({ error: "انتهت صلاحية كلمة المرور المؤقتة. اطلب إعادة إرسال الدعوة من أدمن الشركة." });
     if (result.error === "BAD_PASSWORD") return res.status(401).json({ error: "كلمة المرور الحالية غير صحيحة" });
     if (result.error === "NOT_FOUND") return res.status(404).json({ error: "المستخدم غير موجود" });
