@@ -63,9 +63,18 @@ async function seed() {
   try {
     await client.query("BEGIN");
     
+    // Clear old data
+    console.log("Cleaning database tables...");
+    await client.query("SELECT set_config('app.login_lookup', '1', true)");
+    await client.query("DELETE FROM platform_admins");
+    await client.query("DELETE FROM auth_sessions");
+    await client.query("DELETE FROM user_directory");
+    await client.query("DELETE FROM app_users");
+    await client.query("DELETE FROM companies");
+
     // 1. Seed Company
-    const companyId = "company-demo";
-    console.log("Seeding company company-demo...");
+    const companyId = "company-demo-tenant";
+    console.log(`Seeding company ${companyId}...`);
     await client.query(`
       INSERT INTO companies (id, name, tax_number, email, city, is_active)
       VALUES ($1, 'شركة سند ذكي التجريبية', '300000000000003', 'demo@sanad.local', 'الرياض', true)
@@ -74,7 +83,6 @@ async function seed() {
 
     // Set config so RLS doesn't block insertion of client users
     await client.query("SELECT set_config('app.company_id', $1, true)", [companyId]);
-    await client.query("SELECT set_config('app.login_lookup', '1', true)");
 
     // 2. Seed Users
     for (const u of usersToSeed) {
