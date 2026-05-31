@@ -104,6 +104,7 @@ export interface CreateUserRequest {
   email: string;
   name: string;
   role: User['role'];
+  password?: string;
 }
 
 export interface UpdateUserStatusRequest {

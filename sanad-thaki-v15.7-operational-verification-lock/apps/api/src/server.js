@@ -1742,31 +1742,43 @@ app.post(
     const schema = z.object({
       name: z.string().min(2).max(120),
       email: z.string().email(),
-      role: z.enum(["OWNER", "ADMIN", "MEMBER", "FINANCE_MANAGER", "ACCOUNTANT"])
+      role: z.enum(["OWNER", "ADMIN", "MEMBER", "FINANCE_MANAGER", "ACCOUNTANT"]),
+      password: z.string().min(12).optional().or(z.literal(""))
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "بيانات المستخدم غير صحيحة", details: parsed.error.issues });
-    if (config.NODE_ENV === "production" && !config.SMTP_HOST) {
-      return res.status(500).json({ error: "إعداد SMTP مطلوب في الإنتاج لإرسال دعوات الموظفين." });
+    if (config.NODE_ENV === "production" && !parsed.data.password && !config.SMTP_HOST) {
+      return res.status(500).json({ error: "إعداد SMTP مطلوب في الإنتاج لإرسال دعوات الموظفين عند عدم تحديد كلمة مرور يدوياً." });
     }
 
     try {
-      const tempPassword = generateTemporaryPassword();
-      const passwordHash = await bcrypt.hash(tempPassword, 12);
+      const isManualPassword = !!parsed.data.password;
+      const rawPassword = parsed.data.password || generateTemporaryPassword();
+      const passwordHash = await bcrypt.hash(rawPassword, 12);
+      const mustChange = !isManualPassword; // Don't force change if manually specified by owner
+      
       const result = await withTenant(req.companyId, async client => {
         const user = await client.query(
           `INSERT INTO app_users (id, company_id, name, email, password_hash, role, is_active, user_status, password_must_change, invite_expires_at)
-           VALUES ($1,$2,$3,$4,$5,$6,true,'ACTIVE',true,now() + interval '24 hours')
+           VALUES ($1,$2,$3,$4,$5,$6,true,'ACTIVE',$7,now() + interval '24 hours')
            RETURNING id, name, email, role, is_active, user_status, password_must_change, invite_expires_at, created_at`,
-          [`user-${randomUUID()}`, req.companyId, parsed.data.name, parsed.data.email, passwordHash, parsed.data.role]
+          [`user-${randomUUID()}`, req.companyId, parsed.data.name, parsed.data.email, passwordHash, parsed.data.role, mustChange]
         );
-        await writeAudit(client, req, "CREATE_USER_INVITE", "app_user", user.rows[0].id, { role: parsed.data.role, deliveryMode: invitationPayload(tempPassword).deliveryMode });
+        await writeAudit(client, req, "CREATE_USER_INVITE", "app_user", user.rows[0].id, { role: parsed.data.role, deliveryMode: isManualPassword ? "manual_password" : invitationPayload(rawPassword).deliveryMode });
         return user.rows[0];
       });
       await upsertUserDirectory(result.email, req.companyId, result.id, true);
       await updateTenantRollup(req.companyId, { user_count: 1 }).catch(err => console.error("Tenant user rollup warning:", err.message));
-      const delivery = await sendEmployeeInviteEmail(result, tempPassword);
-      res.json({ user: result, invite: invitationPayload(tempPassword), delivery, message: delivery.sent ? "تم إنشاء المستخدم وإرسال الدعوة على البريد." : "تم إنشاء المستخدم وتجهيز دعوة الدخول للاختبار." });
+      const delivery = await sendEmployeeInviteEmail(result, rawPassword);
+      res.json({ 
+        user: result, 
+        invite: {
+          deliveryMode: isManualPassword ? "manual_password" : invitationPayload(rawPassword).deliveryMode,
+          temporaryPassword: isManualPassword ? rawPassword : (config.NODE_ENV === "production" ? null : rawPassword)
+        }, 
+        delivery, 
+        message: isManualPassword ? "تم إنشاء الحساب بنجاح بكلمة المرور المحددة." : (delivery.sent ? "تم إنشاء المستخدم وإرسال الدعوة على البريد." : "تم إنشاء المستخدم وتجهيز دعوة الدخول للاختبار.") 
+      });
     } catch (err) {
       return handleDbError(err, res);
     }

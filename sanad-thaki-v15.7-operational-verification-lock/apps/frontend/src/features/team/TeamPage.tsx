@@ -27,7 +27,8 @@ export default function TeamPage() {
   const [form, setForm] = useState({
     name: '',
     email: '',
-    role: 'MEMBER' as UserRole
+    role: 'MEMBER' as UserRole,
+    password: ''
   });
 
   const fetchUsers = useCallback(async () => {
@@ -54,16 +55,26 @@ export default function TeamPage() {
       return;
     }
 
+    if (form.password && form.password.trim().length < 12) {
+      notify.error('خطأ', 'يجب أن تتكون كلمة المرور من 12 خانة على الأقل');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await apiService.createUser({
         name: form.name.trim(),
         email: form.email.trim(),
-        role: form.role
+        role: form.role,
+        password: form.password.trim() || undefined
       });
-      notify.success('تم إرسال الدعوة', 'تم إرسال رابط تفعيل الحساب إلى البريد الإلكتروني بنجاح');
+      if (form.password.trim()) {
+        notify.success('تم إنشاء الحساب', 'تم إنشاء حساب الموظف بنجاح بكلمة المرور المحددة');
+      } else {
+        notify.success('تم إرسال الدعوة', 'تم إرسال رابط تفعيل الحساب إلى البريد الإلكتروني بنجاح');
+      }
       setShowInviteModal(false);
-      setForm({ name: '', email: '', role: 'MEMBER' });
+      setForm({ name: '', email: '', role: 'MEMBER', password: '' });
       fetchUsers();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'فشل إرسال الدعوة للمستخدم';
@@ -332,6 +343,16 @@ export default function TeamPage() {
               { value: 'ACCOUNTANT', label: 'محاسب (رفع الفواتير وإرسال رسائل التذكير)' }
             ]}
             disabled={submitting}
+          />
+
+          <Input
+            label="كلمة المرور للحساب الجديد (اختياري)"
+            type="password"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            placeholder="أدخل كلمة مرور (حد أدنى 12 خانة) أو اتركها فارغة للإرسال بالبريد"
+            disabled={submitting}
+            minLength={12}
           />
 
           {form.role === 'ADMIN' && (

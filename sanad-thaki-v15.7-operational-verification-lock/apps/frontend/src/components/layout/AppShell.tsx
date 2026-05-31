@@ -50,7 +50,7 @@ const navItems: NavItem[] = [
   { key: 'reports', path: '/reports', icon: BarChart3, labelKey: 'nav.reports', roles: ['OWNER', 'FINANCE_MANAGER', 'ADMIN'] },
   { key: 'whatsapp', path: '/whatsapp', icon: MessageCircle, labelKey: 'nav.whatsapp', roles: ['OWNER', 'ACCOUNTANT', 'FINANCE_MANAGER'] },
   { key: 'users', path: '/users', icon: Users, labelKey: 'nav.users', roles: ['OWNER', 'ADMIN'] },
-  { key: 'settings', path: '/settings', icon: Settings, labelKey: 'nav.settings', roles: ['OWNER', 'ADMIN'] },
+  { key: 'settings', path: '/settings', icon: Settings, labelKey: 'nav.settings', roles: ['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT', 'SANAD_ADMIN'] },
   { key: 'billing', path: '/billing', icon: CreditCard, labelKey: 'nav.billing', roles: ['OWNER', 'ADMIN'] },
   { key: 'support', path: '/support', icon: HelpCircle, labelKey: 'nav.support', roles: ['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT'] },
   { key: 'audit', path: '/audit', icon: Shield, labelKey: 'nav.audit', roles: ['OWNER', 'ADMIN', 'FINANCE_MANAGER'] },

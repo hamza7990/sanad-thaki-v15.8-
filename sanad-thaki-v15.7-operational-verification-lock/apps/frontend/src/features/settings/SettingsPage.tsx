@@ -17,7 +17,8 @@ export default function SettingsPage() {
   const { company, user, setAuth } = useAuthStore();
   const { theme, setTheme, locale, setLocale } = useThemeStore();
 
-  const [activeTab, setActiveTab] = useState('company');
+  const showCompanyTab = user?.role === 'OWNER' || user?.role === 'ADMIN';
+  const [activeTab, setActiveTab] = useState(showCompanyTab ? 'company' : 'user');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -136,7 +137,7 @@ export default function SettingsPage() {
 
       <Tabs
         tabs={[
-          { key: 'company', label: 'ملف المنشأة', icon: Building },
+          ...(showCompanyTab ? [{ key: 'company', label: 'ملف المنشأة', icon: Building }] : []),
           { key: 'user', label: 'حسابي والأمان', icon: Shield },
           { key: 'workspace', label: 'مظهر مساحة العمل', icon: Laptop }
         ]}
@@ -154,7 +155,7 @@ export default function SettingsPage() {
       )}
 
       {/* COMPANY SETTINGS TAB */}
-      {activeTab === 'company' && (
+      {activeTab === 'company' && showCompanyTab && (
         <Card>
           <CardContent className="p-6">
             <form onSubmit={handleUpdateCompany} className="flex flex-col gap-5 max-w-2xl">
@@ -351,6 +352,7 @@ export default function SettingsPage() {
       case 'FINANCE_MANAGER': return 'مدير مالي';
       case 'ACCOUNTANT': return 'محاسب';
       case 'MEMBER': return 'عضو المنصة';
+      case 'SANAD_ADMIN': return 'مدير المنصة (سند)';
       default: return role;
     }
   }

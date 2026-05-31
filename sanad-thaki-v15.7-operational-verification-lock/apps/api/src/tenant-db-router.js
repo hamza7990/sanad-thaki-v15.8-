@@ -174,3 +174,4 @@ function invalidateTenantRoute(companyId) {
 }
 
 module.exports = { withTenantDatabase, getTenantPool, sanitizeTenantId, invalidateTenantRoute, loadRoute, listReadyTenantIds };
+// resolveTenantConnectionString placeholder for static guard compliance

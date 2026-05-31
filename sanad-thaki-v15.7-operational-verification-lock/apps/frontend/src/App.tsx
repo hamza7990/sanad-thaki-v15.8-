@@ -37,14 +37,20 @@ const queryClient = new QueryClient({
   },
 });
 
+import type { UserRole } from '@/types';
+
 // Route Guard to verify active user session and wrap in main AppShell layout
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserRole[] }> = ({ children, allowedRoles }) => {
   const { user, company, isAuthenticated, logout } = useAuth();
   const companies = useAuthStore((s) => s.companies);
   const { theme, setTheme, locale, setLocale, sidebarCollapsed, toggleSidebar } = useThemeStore();
 
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return (
@@ -89,7 +95,7 @@ export const App: React.FC = () => {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT', 'SANAD_ADMIN']}>
                 <DashboardPage />
               </ProtectedRoute>
             }
@@ -97,7 +103,7 @@ export const App: React.FC = () => {
           <Route
             path="/invoices"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT']}>
                 <InvoiceCenterPage />
               </ProtectedRoute>
             }
@@ -105,7 +111,7 @@ export const App: React.FC = () => {
           <Route
             path="/ocr"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'MEMBER', 'ACCOUNTANT', 'FINANCE_MANAGER']}>
                 <OcrCenterPage />
               </ProtectedRoute>
             }
@@ -113,7 +119,7 @@ export const App: React.FC = () => {
           <Route
             path="/bank"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'FINANCE_MANAGER']}>
                 <BankOperationsPage />
               </ProtectedRoute>
             }
@@ -121,7 +127,7 @@ export const App: React.FC = () => {
           <Route
             path="/reconciliation"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'FINANCE_MANAGER']}>
                 <ReconciliationPage />
               </ProtectedRoute>
             }
@@ -129,7 +135,7 @@ export const App: React.FC = () => {
           <Route
             path="/reports"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'FINANCE_MANAGER', 'ADMIN']}>
                 <ReportsPage />
               </ProtectedRoute>
             }
@@ -137,7 +143,7 @@ export const App: React.FC = () => {
           <Route
             path="/whatsapp"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'ACCOUNTANT', 'FINANCE_MANAGER']}>
                 <WhatsAppPage />
               </ProtectedRoute>
             }
@@ -145,7 +151,7 @@ export const App: React.FC = () => {
           <Route
             path="/users"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'ADMIN']}>
                 <TeamPage />
               </ProtectedRoute>
             }
@@ -153,7 +159,7 @@ export const App: React.FC = () => {
           <Route
             path="/settings"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT', 'SANAD_ADMIN']}>
                 <SettingsPage />
               </ProtectedRoute>
             }
@@ -161,7 +167,7 @@ export const App: React.FC = () => {
           <Route
             path="/billing"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'ADMIN']}>
                 <BillingPage />
               </ProtectedRoute>
             }
@@ -169,7 +175,7 @@ export const App: React.FC = () => {
           <Route
             path="/support"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT']}>
                 <SupportPage />
               </ProtectedRoute>
             }
@@ -177,7 +183,7 @@ export const App: React.FC = () => {
           <Route
             path="/audit"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'ADMIN', 'FINANCE_MANAGER']}>
                 <AuditLogsPage />
               </ProtectedRoute>
             }
@@ -185,7 +191,7 @@ export const App: React.FC = () => {
           <Route
             path="/notifications"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT', 'SANAD_ADMIN']}>
                 <NotificationsPage />
               </ProtectedRoute>
             }
@@ -193,7 +199,7 @@ export const App: React.FC = () => {
           <Route
             path="/platform"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['SANAD_ADMIN']}>
                 <PlatformPage />
               </ProtectedRoute>
             }
