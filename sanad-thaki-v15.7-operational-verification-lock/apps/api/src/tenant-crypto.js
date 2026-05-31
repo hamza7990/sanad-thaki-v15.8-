@@ -8,9 +8,10 @@ const config = loadConfig();
 function rawTenantKey(companyId, version = null) {
   const tenantId = String(companyId || "").trim();
   let raw = getTenantDataKey(tenantId, version);
-  if (!raw && !version) raw = (config.tenantKmsMap || {})[tenantId];
-  if (!raw && !version && config.tenantKmsSecretRefsMap?.[tenantId]) raw = getSecretSync(config.tenantKmsSecretRefsMap[tenantId]);
-  if (!raw && !version) {
+  const isFallbackAllowed = !version || version === 1 || version === "1";
+  if (!raw && isFallbackAllowed) raw = (config.tenantKmsMap || {})[tenantId];
+  if (!raw && isFallbackAllowed && config.tenantKmsSecretRefsMap?.[tenantId]) raw = getSecretSync(config.tenantKmsSecretRefsMap[tenantId]);
+  if (!raw && isFallbackAllowed) {
     try { raw = getSecretSync(`local://sanad/tenant/${tenantId}/data_key`); } catch { /* no local provisioned key */ }
   }
   if (!raw) {
