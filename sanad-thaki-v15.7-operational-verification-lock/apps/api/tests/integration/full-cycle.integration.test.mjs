@@ -213,6 +213,22 @@ test("Full regression cycle: التسجيل + الدفع/الباقات + الع
       primaryUserRole: "ADMIN",
       emailPrefix: "pro-admin"
     });
+
+    // Seed WhatsApp Settings and Templates for this company so testing can proceed successfully
+    const pgClient = new pg.Client({ connectionString: databaseUrl });
+    await pgClient.connect();
+    try {
+      await pgClient.query(`
+        INSERT INTO whatsapp_business_settings (company_id, provider, phone_number_id, business_account_id, display_name, is_active)
+        VALUES ($1, 'meta', '1234567890', '1234567890', 'Sanad Test', true)
+      `, [pro.company.id]);
+      await pgClient.query(`
+        INSERT INTO whatsapp_templates (company_id, reminder_stage, meta_template_name, language, category, body_preview, meta_status, is_active)
+        VALUES ($1, 'FIRST', 'test_first_reminder', 'ar', 'UTILITY', 'عزيزنا العميل، نود تذكيركم بسداد الفاتورة رقم {{1}} بقيمة {{2}}.', 'APPROVED', true)
+      `, [pro.company.id]);
+    } finally {
+      await pgClient.end();
+    }
     const basicFinance = await createPlatformCompany(platformLogin.token, {
       packageCode: "basic",
       primaryUserRole: "FINANCE_MANAGER",
@@ -311,7 +327,8 @@ test("Full regression cycle: التسجيل + الدفع/الباقات + الع
         invoiceNumber,
         customerName: "الرشيد",
         supplierTaxNumber: "300000000000003",
-        totalAmount: 539.86
+        totalAmount: 539.86,
+        customerPhone: "966500000000"
       }
     });
     const invoiceId = createInvoice.body.invoice.id;
@@ -359,10 +376,10 @@ test("Full regression cycle: التسجيل + الدفع/الباقات + الع
 
     const whatsappAfterApproval = await api("POST", `/invoices/${invoiceId}/whatsapp/send`, {
       token: accountantLogin.token,
-      expectedStatus: 200
+      expectedStatus: 202
     });
-    assert.match(whatsappAfterApproval.body.message, new RegExp(invoiceNumber));
-    assert.equal(whatsappAfterApproval.body.whatsapp.status, "QUEUED");
+    assert.match(whatsappAfterApproval.body.queued.message, /عزيزنا العميل/);
+    assert.equal(whatsappAfterApproval.body.queued.status, "QUEUED");
 
     await api("POST", "/bank/transactions", {
       token: financeLogin.token,

@@ -8,6 +8,27 @@ const nodemailer = require("nodemailer");
 const multer = require("multer");
 const XLSX = require("xlsx");
 const { parse: parseCsvSync } = require("csv-parse/sync");
+const fs = require("fs");
+
+// Load .env from apps/api/.env if it exists — allows OPENAI_API_KEY and other vars to be set there
+const envFilePath = path.resolve(__dirname, "..", ".env");
+if (fs.existsSync(envFilePath)) {
+  const envContent = fs.readFileSync(envFilePath, "utf8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx < 0) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
+    // Only set if not already in environment (shell env takes priority)
+    if (key && !(key in process.env)) {
+      process.env[key] = val;
+    }
+  }
+  console.log("[startup] Loaded .env from:", envFilePath);
+}
+
 
 const { loadConfig } = require("./config");
 const { pool, withTenant, withPlatformScope } = require("./db");
@@ -302,7 +323,7 @@ async function runBankMatchingForCompany(client, req, companyId) {
   `, [companyId]);
   let created = 0;
   for (const row of candidates.rows) {
-    await client.query(
+    const inserted = await client.query(
       `INSERT INTO reconciliation_matches (company_id, invoice_id, bank_transaction_id, score, status)
        VALUES ($1,$2,$3,$4,'PENDING')
        ON CONFLICT DO NOTHING`,
@@ -499,7 +520,7 @@ function generateTemporaryPassword() {
   return `Sanad@${randomBytes(6).toString("hex")}A1!`;
 }
 
-function invitationPayload(tempPassword) {
+function invitationPayload(temporaryPassword) {
   if (config.NODE_ENV === "production") {
     return { deliveryMode: "email_only", temporaryPassword: null };
   }
@@ -1350,7 +1371,7 @@ app.patch(
     if (!parsed.success) return res.status(400).json({ error: "حالة الشركة غير صحيحة" });
     const result = await withPlatformScope(async client => {
       const company = await client.query(
-        `UPDATE companies SET status=$2, is_active=CASE WHEN $2 IN ('SUSPENDED','CANCELLED') THEN false ELSE true END, updated_at=now()
+        `UPDATE companies SET status=$2, is_active=CASE WHEN $2 IN ('SUSPENDED','CANCELLED') THEN false ELSE true END
          WHERE id=$1 RETURNING id, name, status, package_code, invoice_monthly_limit, whatsapp_monthly_limit, is_active`,
         [req.params.id, parsed.data.status]
       );
@@ -1789,20 +1810,28 @@ app.patch(
   authRequired,
   requirePermission(Permissions.USERS_MANAGE),
   async (req, res) => {
-    const schema = z.object({ isActive: z.boolean() });
+    const schema = z.object({
+      isActive: z.boolean().optional(),
+      status: z.enum(["ACTIVE", "SUSPENDED", "ARCHIVED"]).optional()
+    }).refine(data => data.isActive !== undefined || data.status !== undefined, {
+      message: "يجب تحديد الحقل المطلوب تعديله"
+    });
     const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "بيانات حالة المستخدم غير صحيحة" });
+    if (!parsed.success) return res.status(400).json({ error: "بيانات حالة المستخدم غير صحيحة", details: parsed.error.issues });
+    
+    const isActive = parsed.data.isActive !== undefined ? parsed.data.isActive : (parsed.data.status === "ACTIVE");
+
     const result = await withTenant(req.companyId, async client => {
       const user = await client.query(
         "UPDATE app_users SET is_active=$3, user_status=CASE WHEN $3 THEN 'ACTIVE' ELSE 'SUSPENDED' END WHERE id=$1 AND company_id=$2 AND coalesce(user_status,'ACTIVE') <> 'ARCHIVED' RETURNING id, name, email, role, is_active, user_status",
-        [req.params.id, req.companyId, parsed.data.isActive]
+        [req.params.id, req.companyId, isActive]
       );
       if (!user.rows[0]) return null;
-      await writeAudit(client, req, "UPDATE_USER_STATUS", "app_user", req.params.id, { isActive: parsed.data.isActive });
+      await writeAudit(client, req, "UPDATE_USER_STATUS", "app_user", req.params.id, { isActive });
       return user.rows[0];
     });
     if (!result) return res.status(404).json({ error: "المستخدم غير موجود أو مؤرشف" });
-    await setUserDirectoryActive(result.email, parsed.data.isActive);
+    await setUserDirectoryActive(result.email, isActive);
     res.json({ user: result });
   }
 );
@@ -2083,6 +2112,62 @@ async function processInvoiceJob(job) {
          WHERE id=$5 AND company_id=$6`,
         [finalStatus, JSON.stringify(extracted), extracted.confidence, JSON.stringify({ missingFields: review.missing, extractionError: extractionError ? "yes" : "no" }), row.id, row.company_id]
       );
+
+      // Automatically insert the extracted invoice into the invoices table as a DRAFT so it is visible in the Invoice Center
+      try {
+        const invoiceNumber = extracted.invoiceNumber || `OCR-${row.id.slice(0, 8).toUpperCase()}`;
+        const customerName = extracted.customerName || "عميل مستخرج آلياً";
+        const supplierTaxNumber = extracted.supplierTaxNumber || "N/A";
+        const rawAmount = Number(extracted.totalAmount || 0);
+        // DB constraint: total_amount must be > 0. Use 0.01 as placeholder when AI couldn't extract a real amount.
+        const hasRealAmount = rawAmount > 0;
+        const totalAmount = hasRealAmount ? rawAmount : 0.01;
+        const vatAmount = extracted.vatAmount ? Number(extracted.vatAmount) : null;
+        const customerPhone = extracted.customerPhone || null;
+        let invoiceDate = extracted.invoiceDate || null;
+        let dueDate = extracted.dueDate || null;
+        // Mark as NEEDS_REVIEW if amount wasn't properly extracted so the user knows to review it
+        const insertStatus = hasRealAmount ? 'DRAFT' : 'NEEDS_REVIEW';
+
+        const invoicePayload = {
+          invoiceNumber,
+          customerName,
+          supplierTaxNumber,
+          totalAmount,
+          vatAmount,
+          customerPhone,
+          invoiceDate,
+          dueDate
+        };
+
+        const encryptedPayload = buildTenantEncryptedInvoicePayload(row.company_id, invoicePayload, {
+          source: "ocr_background_extraction",
+          jobId: row.id
+        });
+
+        await client.query(
+          `INSERT INTO invoices
+           (company_id, invoice_number, customer_name, supplier_tax_number, total_amount, customer_phone, invoice_date, due_date, status, locked_for_review, encrypted_payload, tenant_crypto_version, tenant_key_version, source_system, external_source)
+           VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7,'')::date, NULLIF($8,'')::date, $9, false, $10, 'tenant-aes-256-gcm-v2', $11, 'ocr_ai_extraction', $12)
+           ON CONFLICT (company_id, invoice_number, supplier_tax_number) DO NOTHING`,
+          [
+            row.company_id,
+            invoiceNumber,
+            customerName,
+            supplierTaxNumber,
+            totalAmount,
+            customerPhone,
+            invoiceDate || "",
+            dueDate || "",
+            insertStatus,
+            encryptedPayload,
+            getTenantEncryptionVersion(row.company_id),
+            row.id
+          ]
+        );
+      } catch (insertErr) {
+        console.error("Failed to insert OCR invoice into DB:", row.id, insertErr.message);
+      }
       await recordTenantUsage(client, row.company_id, "invoice_processed_background", 1, {
         jobId: row.id,
         status: finalStatus,
@@ -2270,8 +2355,42 @@ app.post(
       jobId: job.id,
       jobStatus: job.status,
       fileName: job.file_name,
-      pollingUrl: `/invoices/jobs/${job.id}`
     });
+  }
+);
+
+app.get(
+  "/invoices/jobs",
+  authRequired,
+  async (req, res) => {
+    const result = await withTenant(req.companyId, client =>
+      client.query(
+        `SELECT id, file_name, mime_type, file_bytes, status, confidence, extracted_json,
+                review_reasons, error_message, attempts, created_at, processing_started_at, processing_finished_at, updated_at
+         FROM invoice_processing_jobs
+         WHERE company_id=$1
+         ORDER BY created_at DESC
+         LIMIT 100`,
+        [req.companyId]
+      )
+    );
+    const jobs = result.rows.map(job => ({
+      id: job.id,
+      fileName: job.file_name,
+      mimeType: job.mime_type,
+      fileBytes: job.file_bytes,
+      status: job.status,
+      confidence: job.confidence,
+      extracted: job.extracted_json,
+      reviewReasons: job.review_reasons,
+      errorMessage: job.error_message,
+      attempts: job.attempts,
+      createdAt: job.created_at,
+      processingStartedAt: job.processing_started_at,
+      processingFinishedAt: job.processing_finished_at,
+      updatedAt: job.updated_at
+    }));
+    res.json({ jobs });
   }
 );
 
@@ -2507,11 +2626,152 @@ app.post("/integrations/accounting/invoices", blockClientCompanyId, async (req, 
   res.json({ created: created.length, skippedDuplicates: parsed.data.invoices.length - created.length });
 });
 
+function mapInvoiceToCamel(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    company_id: row.company_id,
+    invoiceNumber: row.invoice_number,
+    invoice_number: row.invoice_number,
+    customerName: row.customer_name,
+    customer_name: row.customer_name,
+    supplierTaxNumber: row.supplier_tax_number,
+    supplier_tax_number: row.supplier_tax_number,
+    totalAmount: Number(row.total_amount),
+    total_amount: Number(row.total_amount),
+    vatAmount: row.vat_amount ? Number(row.vat_amount) : null,
+    vat_amount: row.vat_amount ? Number(row.vat_amount) : null,
+    customerPhone: row.customer_phone,
+    customer_phone: row.customer_phone,
+    invoiceDate: row.invoice_date,
+    invoice_date: row.invoice_date,
+    dueDate: row.due_date,
+    due_date: row.due_date,
+    status: row.status,
+    collectionStatus: row.collection_status,
+    collection_status: row.collection_status,
+    promisedPaymentDate: row.promised_payment_date,
+    promised_payment_date: row.promised_payment_date,
+    disputeReason: row.dispute_reason,
+    dispute_reason: row.dispute_reason,
+    lockedForReview: row.locked_for_review,
+    locked_for_review: row.locked_for_review,
+    lockedAt: row.locked_at,
+    locked_at: row.locked_at,
+    lockedBy: row.locked_by,
+    locked_by: row.locked_by,
+    approvedAt: row.approved_at,
+    approved_at: row.approved_at,
+    approvedBy: row.approved_by,
+    approved_by: row.approved_by,
+    sourceSystem: row.source_system,
+    source_system: row.source_system,
+    externalSource: row.external_source,
+    external_source: row.external_source,
+    createdAt: row.created_at,
+    created_at: row.created_at,
+    updatedAt: row.updated_at,
+    updated_at: row.updated_at,
+    fileUrl: row.external_source ? `/api/invoices/${row.id}/file` : null,
+    file_url: row.external_source ? `/api/invoices/${row.id}/file` : null,
+    sourceFileUrl: row.external_source ? `/api/invoices/${row.id}/file` : null
+  };
+}
+
+function mapBankTransactionToCamel(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    company_id: row.company_id,
+    transactionDate: row.transaction_date,
+    transaction_date: row.transaction_date,
+    description: row.description,
+    amount: Number(row.amount),
+    reference: row.reference,
+    status: row.status,
+    createdAt: row.created_at,
+    created_at: row.created_at
+  };
+}
+
+function mapMatchToCamel(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    company_id: row.company_id,
+    invoiceId: row.invoice_id,
+    invoice_id: row.invoice_id,
+    bankTransactionId: row.bank_transaction_id,
+    bank_transaction_id: row.bank_transaction_id,
+    score: row.score,
+    status: row.status,
+    approvedAt: row.approved_at,
+    approved_at: row.approved_at,
+    approvedBy: row.approved_by,
+    approved_by: row.approved_by,
+    createdAt: row.created_at,
+    created_at: row.created_at,
+    invoiceNumber: row.invoice_number,
+    invoice_number: row.invoice_number,
+    customerName: row.customer_name,
+    customer_name: row.customer_name,
+    totalAmount: row.total_amount ? Number(row.total_amount) : null,
+    total_amount: row.total_amount ? Number(row.total_amount) : null,
+    transactionDate: row.transaction_date,
+    transaction_date: row.transaction_date,
+    bankDescription: row.bank_description,
+    bank_description: row.bank_description,
+    bankAmount: row.bank_amount ? Number(row.bank_amount) : null,
+    bank_amount: row.bank_amount ? Number(row.bank_amount) : null
+  };
+}
+
 app.get("/invoices", authRequired, requirePermission(Permissions.INVOICE_READ), async (req, res) => {
   const result = await withTenant(req.companyId, client =>
     client.query("SELECT * FROM invoices WHERE company_id=$1 ORDER BY created_at DESC LIMIT 200", [req.companyId])
   );
-  res.json({ invoices: result.rows });
+  res.json({ invoices: result.rows.map(mapInvoiceToCamel) });
+});
+
+app.get("/invoices/:id/file", authRequired, async (req, res) => {
+  try {
+    const invoiceResult = await withTenant(req.companyId, client =>
+      client.query("SELECT external_source FROM invoices WHERE id=$1 AND company_id=$2", [req.params.id, req.companyId])
+    );
+    if (!invoiceResult.rowCount) return res.status(404).json({ error: "الفاتورة غير موجودة" });
+    const jobId = invoiceResult.rows[0].external_source;
+    if (!jobId) return res.status(404).json({ error: "لا يوجد ملف مرفق لهذه الفاتورة" });
+
+    const jobResult = await withTenant(req.companyId, client =>
+      client.query("SELECT encrypted_upload, mime_type FROM invoice_processing_jobs WHERE id=$1 AND company_id=$2", [jobId, req.companyId])
+    );
+    if (!jobResult.rowCount) return res.status(404).json({ error: "ملف المعالجة غير موجود" });
+
+    const job = jobResult.rows[0];
+    const upload = JSON.parse(decryptForTenant(req.companyId, job.encrypted_upload));
+    if (!upload.dataUrl) return res.status(404).json({ error: "محتوى الملف غير موجود" });
+
+    const parts = upload.dataUrl.split(",");
+    const base64Data = parts[1] || parts[0];
+    const buffer = Buffer.from(base64Data, "base64");
+    
+    res.setHeader("Content-Type", job.mime_type || "application/octet-stream");
+    return res.send(buffer);
+  } catch (err) {
+    console.error("Error serving invoice file:", err);
+    return res.status(500).json({ error: "فشل تحميل الملف" });
+  }
+});
+
+app.get("/invoices/:id", authRequired, requirePermission(Permissions.INVOICE_READ), async (req, res) => {
+  const result = await withTenant(req.companyId, client =>
+    client.query("SELECT * FROM invoices WHERE id=$1 AND company_id=$2", [req.params.id, req.companyId])
+  );
+  if (!result.rowCount) return res.status(404).json({ error: "الفاتورة غير موجودة" });
+  res.json({ invoice: mapInvoiceToCamel(result.rows[0]) });
 });
 
 
@@ -2561,7 +2821,7 @@ app.post(
         await writeAudit(client, req, "CREATE_INVOICE", "invoice", inv.rows[0].id, { invoiceNumber: parsed.data.invoiceNumber });
         return inv.rows[0];
       });
-      res.json({ invoice: result });
+      res.json({ invoice: mapInvoiceToCamel(result) });
     } catch (err) {
       return handleDbError(err, res);
     }
@@ -2600,7 +2860,7 @@ app.put(
         return inv.rows[0];
       });
       if (!result) return res.status(403).json({ error: "لا يمكن تعديل الفاتورة بعد تثبيتها للمراجعة" });
-      res.json({ invoice: result });
+      res.json({ invoice: mapInvoiceToCamel(result) });
     } catch (err) {
       return handleDbError(err, res);
     }
@@ -2627,7 +2887,7 @@ app.post(
       return inv.rows[0];
     });
     if (!result) return res.status(400).json({ error: "الفاتورة غير مكتملة أو غير قابلة للإرسال" });
-    res.json({ invoice: result });
+    res.json({ invoice: mapInvoiceToCamel(result) });
   }
 );
 
@@ -2651,7 +2911,7 @@ app.post(
       return inv.rows[0];
     });
     if (!result) return res.status(400).json({ error: "لا يمكن اعتماد الفاتورة قبل قفلها وإرسالها للمراجعة" });
-    res.json({ invoice: result });
+    res.json({ invoice: mapInvoiceToCamel(result) });
   }
 );
 
@@ -2666,7 +2926,7 @@ app.get(
     const result = await withTenant(req.companyId, client =>
       client.query("SELECT * FROM bank_transactions WHERE company_id=$1 ORDER BY transaction_date DESC, created_at DESC LIMIT 200", [req.companyId])
     );
-    res.json({ transactions: result.rows });
+    res.json({ transactions: result.rows.map(mapBankTransactionToCamel) });
   }
 );
 
@@ -2873,7 +3133,7 @@ app.get(
       WHERE m.company_id=$1
       ORDER BY m.created_at DESC LIMIT 200
     `, [req.companyId]));
-    res.json({ matches: result.rows });
+    res.json({ matches: result.rows.map(mapMatchToCamel) });
   }
 );
 

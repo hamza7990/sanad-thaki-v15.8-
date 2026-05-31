@@ -76,8 +76,27 @@ async function preprocessInvoiceImage({ buffer, mimeType, session }) {
 
   const sharp = requireSharp();
   const cv = requireOpenCv();
-  const decoded = await sharp(buffer)
-    .rotate()
+
+  // Load and check metadata for upscaling
+  let sharpPipeline = sharp(buffer).rotate();
+  const meta = await sharpPipeline.metadata();
+  const originalWidth = meta.width || 0;
+  const originalHeight = meta.height || 0;
+
+  // 1. Auto-upscale low-quality images to at least 2048px on the longest edge
+  let didUpscale = false;
+  if (originalWidth > 0 && originalHeight > 0 && (originalWidth < 2048 && originalHeight < 2048)) {
+    const scaleFactor = Math.max(2048 / originalWidth, 2048 / originalHeight);
+    const newWidth = Math.round(originalWidth * scaleFactor);
+    const newHeight = Math.round(originalHeight * scaleFactor);
+    sharpPipeline = sharpPipeline.resize(newWidth, newHeight, { kernel: "lanczos3" });
+    didUpscale = true;
+  }
+
+  // 2. Contrast enhancement (.normalize()) and Sharpening (.sharpen())
+  sharpPipeline = sharpPipeline.normalize().sharpen({ sigma: 1.2 });
+
+  const decoded = await sharpPipeline
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -89,14 +108,19 @@ async function preprocessInvoiceImage({ buffer, mimeType, session }) {
   const threshold = new cv.Mat();
   const inverted = new cv.Mat();
   const nonZero = new cv.Mat();
+  let cropped = null;
   let rotated = null;
   let outputMat = null;
+  let useCropped = false;
 
   try {
+    // 3. Grayscale conversion
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-    // Noise reduction before adaptive thresholding.
+
+    // 4. Noise reduction via Gaussian Blur
     cv.GaussianBlur(gray, blurred, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
-    // Adaptive threshold removes shadows and uneven lighting.
+
+    // 5. Adaptive Thresholding to resolve poor lighting and shadows
     cv.adaptiveThreshold(
       blurred,
       threshold,
@@ -107,8 +131,45 @@ async function preprocessInvoiceImage({ buffer, mimeType, session }) {
       11
     );
 
-    // Deskew: identify printed pixels and rotate the page back to a straight baseline.
+    // 6. Auto-detect invoice boundaries & Auto-crop
     cv.bitwise_not(threshold, inverted);
+    let contours = new cv.MatVector();
+    let hierarchy = new cv.Mat();
+    cv.findContours(inverted, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    let largestRect = null;
+    let maxArea = 0;
+    for (let i = 0; i < contours.size(); ++i) {
+      let cnt = contours.get(i);
+      let area = cv.contourArea(cnt);
+      if (area > maxArea) {
+        maxArea = area;
+        largestRect = cv.boundingRect(cnt);
+      }
+      cnt.delete();
+    }
+    contours.delete();
+    hierarchy.delete();
+
+    // If largest area covers at least 15% of the overall canvas, crop to it with padding
+    if (largestRect && maxArea > (width * height * 0.15)) {
+      const pad = 20;
+      let x = Math.max(0, largestRect.x - pad);
+      let y = Math.max(0, largestRect.y - pad);
+      let w = Math.min(width - x, largestRect.width + 2 * pad);
+      let h = Math.min(height - y, largestRect.height + 2 * pad);
+      
+      if (w > 100 && h > 100) {
+        let rect = new cv.Rect(x, y, w, h);
+        cropped = threshold.roi(rect);
+        useCropped = true;
+      }
+    }
+
+    const finalThreshold = useCropped ? cropped : threshold;
+
+    // 7. Deskew (Rotation correction)
+    cv.bitwise_not(finalThreshold, inverted);
     cv.findNonZero(inverted, nonZero);
     let angle = 0;
     if (nonZero.rows > 20) {
@@ -117,14 +178,14 @@ async function preprocessInvoiceImage({ buffer, mimeType, session }) {
     }
 
     if (angle !== 0) {
-      const center = new cv.Point(threshold.cols / 2, threshold.rows / 2);
+      const center = new cv.Point(finalThreshold.cols / 2, finalThreshold.rows / 2);
       const matrix = cv.getRotationMatrix2D(center, angle, 1.0);
       rotated = new cv.Mat();
       cv.warpAffine(
-        threshold,
+        finalThreshold,
         rotated,
         matrix,
-        new cv.Size(threshold.cols, threshold.rows),
+        new cv.Size(finalThreshold.cols, finalThreshold.rows),
         cv.INTER_LINEAR,
         cv.BORDER_CONSTANT,
         new cv.Scalar(255, 255, 255, 255)
@@ -132,7 +193,7 @@ async function preprocessInvoiceImage({ buffer, mimeType, session }) {
       matrix.delete();
       outputMat = rotated;
     } else {
-      outputMat = threshold;
+      outputMat = finalThreshold;
     }
 
     const pngBuffer = await sharp(Buffer.from(outputMat.data), {
@@ -140,17 +201,25 @@ async function preprocessInvoiceImage({ buffer, mimeType, session }) {
     }).png().toBuffer();
 
     if (session?.writeTempFile) await session.writeTempFile("preprocessed-invoice.png", pngBuffer);
+
+    // Build steps array dynamically to reflect what was done
+    const steps = ["grayscale", "noise-reduction-blur", "contrast-enhancement", "sharpening", "adaptive-thresholding"];
+    if (didUpscale) steps.unshift("bicubic-upscaling");
+    if (useCropped) steps.push("auto-boundary-crop");
+    if (angle !== 0) steps.push("deskewing-rotation-correction");
+
     return {
       buffer: pngBuffer,
       mimeType: "image/png",
       skipped: false,
-      width,
-      height,
+      width: outputMat.cols,
+      height: outputMat.rows,
       deskewAngle: angle,
-      steps: ["grayscale", "gaussian-blur", "adaptive-thresholding", "deskewing"]
+      steps
     };
   } finally {
     src.delete(); gray.delete(); blurred.delete(); threshold.delete(); inverted.delete(); nonZero.delete();
+    if (cropped) cropped.delete();
     if (rotated) rotated.delete();
   }
 }

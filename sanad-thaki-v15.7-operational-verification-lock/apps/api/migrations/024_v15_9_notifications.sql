@@ -16,5 +16,6 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications FORCE ROW LEVEL SECURITY;
 
 -- Tenant Isolation Policy
+DROP POLICY IF EXISTS notifications_tenant_isolation ON notifications;
 CREATE POLICY notifications_tenant_isolation ON notifications
   FOR ALL USING (company_id = current_setting('app.company_id', true));

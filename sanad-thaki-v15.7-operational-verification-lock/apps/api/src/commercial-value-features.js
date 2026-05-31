@@ -373,26 +373,154 @@ function buildFinanceWorkbook(payload) {
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }
 
-function minimalPdfBuffer(title, lines) {
-  const safeLines = [title, ...lines].map(v => String(v ?? "").replace(/[()\\]/g, " ").slice(0, 100));
-  
-  const cleanLines = safeLines.map(line => {
-    return line.replace(/[^\x00-\x7F]/g, "?");
-  });
+function transliterateArabic(str) {
+  if (!str) return "";
+  const map = {
+    "ال": "Al-",
+    "رشيد": "Rasheed",
+    "محمد": "Mohamed",
+    "احمد": "Ahmed",
+    "أحمد": "Ahmed",
+    "علي": "Ali",
+    "عبدالله": "Abdullah",
+    "خالد": "Khaled",
+    "سعد": "Saad",
+    "سعود": "Saud",
+    "سند": "Sanad",
+    "ذكي": "Thaki",
+    "شركة": "Co.",
+    "مؤسسة": "Est.",
+    "للتجارة": "Trading",
+    "العامة": "General",
+    "المحدودة": "Ltd."
+  };
+  let result = String(str);
+  for (const [ar, en] of Object.entries(map)) {
+    result = result.split(ar).join(en);
+  }
+  return result.replace(/[^\x00-\x7F]/g, "").trim() || "Client Row";
+}
 
-  const content = cleanLines.map((line, idx) => `BT /F1 11 Tf 50 ${760 - idx * 18} Td (${line}) Tj ET`).join("\r\n");
+function generateProfessionalReportPdf(payload) {
+  const cmds = [];
+  
+  const cTeal = "0.05 0.5 0.45"; 
+  const cEmerald = "0.1 0.6 0.3"; 
+  const cDark = "0.15 0.15 0.15"; 
+  const cLight = "0.96 0.96 0.96"; 
+  const cBorder = "0.85 0.85 0.85"; 
+  const cWhite = "1 1 1";
+  
+  // 1. Header Banner
+  cmds.push(`${cTeal} rg 40 730 515 80 re f`);
+  cmds.push(`${cEmerald} rg 40 805 515 5 re f`);
+  
+  // Banner Text
+  cmds.push(`BT /F2 16 Tf ${cWhite} rg 55 775 Td (SANAD THAKI - CFO FINANCIAL STRATEGIC REPORT) Tj ET`);
+  cmds.push(`BT /F1 9 Tf ${cWhite} rg 55 750 Td (Smart Debt Collection & Customer Invoice Follow-up Executive Summary) Tj ET`);
+  
+  // Report Meta info
+  const dateStr = new Date().toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' });
+  cmds.push(`BT /F1 8 Tf 0.5 0.5 0.5 rg 40 710 Td (Report generated on: ${dateStr} | Platform: Sanad Thaki Enterprise) Tj ET`);
+  
+  cmds.push(`0.8 RG 0.5 w 40 700 m 555 700 l S`);
+  
+  // 2. KPI Summary Section (4 Cards)
+  const cardW = 118;
+  const cardH = 55;
+  const cardY = 630;
+  const cardX = [40, 172, 304, 436];
+  
+  const summary = payload.summary || {};
+  const cards = [
+    { title: "TOTAL INVOICES", val: String(summary.totalInvoices || 0), desc: "Registered count", col: cDark },
+    { title: "PAID AMOUNT", val: `${Number(summary.paidAmount || 0).toLocaleString()} SAR`, desc: "Collected funds", col: cEmerald },
+    { title: "OUTSTANDING", val: `${Number(summary.outstandingAmount || 0).toLocaleString()} SAR`, desc: "Pending collections", col: "0.8 0.2 0.2" },
+    { title: "COLLECTION RATE", val: `${summary.collectionRate || 0}%`, desc: "Strategic efficiency", col: cTeal }
+  ];
+  
+  for (let i = 0; i < 4; i++) {
+    const card = cards[i];
+    const x = cardX[i];
+    
+    cmds.push(`${cLight} rg ${x} ${cardY} ${cardW} ${cardH} re f`);
+    cmds.push(`${cBorder} RG 0.75 w ${x} ${cardY} ${cardW} ${cardH} re s`);
+    
+    cmds.push(`BT /F2 7 Tf 0.4 0.4 0.4 rg ${x+8} ${cardY+42} Td (${card.title}) Tj ET`);
+    cmds.push(`BT /F2 11 Tf ${card.col} rg ${x+8} ${cardY+24} Td (${card.val}) Tj ET`);
+    cmds.push(`BT /F1 6 Tf 0.5 0.5 0.5 rg ${x+8} ${cardY+10} Td (${card.desc}) Tj ET`);
+  }
+  
+  // 3. Detailed Overdue Invoices Section
+  cmds.push(`BT /F2 11 Tf ${cTeal} rg 40 595 Td (STRATEGIC RECEIVABLES & OVERDUE INVOICES) Tj ET`);
+  cmds.push(`BT /F1 7.5 Tf 0.4 0.4 0.4 rg 40 580 Td (Listing of critical invoices requiring immediate CFO collection action and customer reminders) Tj ET`);
+  
+  // Table Header Row
+  const tableY = 550;
+  cmds.push(`${cTeal} rg 40 ${tableY} 515 20 re f`);
+  cmds.push(`BT /F2 8 Tf ${cWhite} rg 50 ${tableY+6} Td (INVOICE #) Tj ET`);
+  cmds.push(`BT /F2 8 Tf ${cWhite} rg 150 ${tableY+6} Td (CUSTOMER / CLIENT) Tj ET`);
+  cmds.push(`BT /F2 8 Tf ${cWhite} rg 310 ${tableY+6} Td (AMOUNT (SAR)) Tj ET`);
+  cmds.push(`BT /F2 8 Tf ${cWhite} rg 400 ${tableY+6} Td (DUE DATE) Tj ET`);
+  cmds.push(`BT /F2 8 Tf ${cWhite} rg 480 ${tableY+6} Td (STATUS) Tj ET`);
+  
+  const invoices = payload.overdueInvoices || [];
+  const maxRows = Math.min(invoices.length, 18);
+  
+  for (let idx = 0; idx < maxRows; idx++) {
+    const inv = invoices[idx];
+    const y = tableY - 20 - idx * 20;
+    
+    if (idx % 2 === 1) {
+      cmds.push(`${cLight} rg 40 ${y} 515 20 re f`);
+    }
+    cmds.push(`${cBorder} RG 0.5 w 40 ${y} m 555 ${y} l S`);
+    
+    const invNum = String(inv.invoice_number || inv.invoiceNumber || "—");
+    const clientName = transliterateArabic(inv.customer_name || inv.customerName || "—");
+    const amount = Number(inv.total_amount || inv.totalAmount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 });
+    const dueDate = inv.due_date || inv.dueDate || "—";
+    
+    const rawStatus = String(inv.status || "").toUpperCase();
+    const statusText = rawStatus === "NEEDS_REVIEW" ? "Pending Review" 
+                     : rawStatus === "DRAFT" ? "Draft" 
+                     : rawStatus === "APPROVED" ? "Approved" 
+                     : rawStatus === "PAID" ? "Paid" 
+                     : rawStatus || "—";
+                     
+    const statusCol = rawStatus === "PAID" ? cEmerald 
+                    : rawStatus === "APPROVED" ? cTeal 
+                    : rawStatus === "NEEDS_REVIEW" ? "0.8 0.5 0.1" 
+                    : "0.4 0.4 0.4";
+    
+    cmds.push(`BT /F1 8 Tf ${cDark} rg 50 ${y+6} Td (${invNum}) Tj ET`);
+    cmds.push(`BT /F1 8 Tf ${cDark} rg 150 ${y+6} Td (${clientName}) Tj ET`);
+    cmds.push(`BT /F2 8 Tf ${cDark} rg 310 ${y+6} Td (${amount}) Tj ET`);
+    cmds.push(`BT /F1 8 Tf ${cDark} rg 400 ${y+6} Td (${dueDate}) Tj ET`);
+    cmds.push(`BT /F2 8 Tf ${statusCol} rg 480 ${y+6} Td (${statusText}) Tj ET`);
+  }
+  
+  if (invoices.length === 0) {
+    cmds.push(`BT /F1 9 Tf 0.5 0.5 0.5 rg 200 ${tableY - 30} Td (No outstanding or overdue invoices recorded.) Tj ET`);
+  }
+  
+  cmds.push(`0.8 RG 0.5 w 40 40 m 555 40 l S`);
+  cmds.push(`BT /F1 7 Tf 0.5 0.5 0.5 rg 40 28 Td (Sanad Thaki AI Platform - Strategic Receivables Control | Page 1 of 1 | Confidential) Tj ET`);
+  
+  const content = cmds.join("\r\n");
   const stream = Buffer.from(content, "ascii");
   
   const objects = [
     Buffer.from("1 0 obj\r\n<< /Type /Catalog /Pages 2 0 R >>\r\nendobj\r\n", "ascii"),
     Buffer.from("2 0 obj\r\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\r\nendobj\r\n", "ascii"),
-    Buffer.from("3 0 obj\r\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\r\nendobj\r\n", "ascii"),
+    Buffer.from("3 0 obj\r\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 6 0 R >> >> /Contents 5 0 R >>\r\nendobj\r\n", "ascii"),
     Buffer.from("4 0 obj\r\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\r\nendobj\r\n", "ascii"),
     Buffer.concat([
       Buffer.from(`5 0 obj\r\n<< /Length ${stream.length} >>\r\nstream\r\n`, "ascii"),
       stream,
       Buffer.from("\r\nendstream\r\nendobj\r\n", "ascii")
-    ])
+    ]),
+    Buffer.from("6 0 obj\r\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\r\nendobj\r\n", "ascii"),
   ];
 
   const chunks = [Buffer.from("%PDF-1.4\r\n", "ascii")];
@@ -419,6 +547,18 @@ function minimalPdfBuffer(title, lines) {
   chunks.push(Buffer.from(trailerStr, "ascii"));
   
   return Buffer.concat(chunks);
+}
+
+function minimalPdfBuffer(title, lines) {
+  return generateProfessionalReportPdf({
+    summary: {
+      totalInvoices: lines.length > 0 ? parseInt(String(lines[0] || "").replace(/[^0-9]/g, '')) || 0 : 0,
+      outstandingAmount: lines.length > 1 ? parseFloat(String(lines[1] || "").replace(/[^0-9.]/g, '')) || 0 : 0,
+      paidAmount: lines.length > 2 ? parseFloat(String(lines[2] || "").replace(/[^0-9.]/g, '')) || 0 : 0,
+      collectionRate: lines.length > 3 ? parseFloat(String(lines[3] || "").replace(/[^0-9.]/g, '')) || 0 : 0
+    },
+    overdueInvoices: []
+  });
 }
 
 async function financeReportPayload(client, companyId, query = {}) {
@@ -768,12 +908,7 @@ function installCommercialValueFeatures(app, deps) {
     await withTenant(req.companyId, client => writeAudit(client, req, "EXPORT_CFO_FINANCE_REPORT", "finance_report", null, { format, filters: req.query || {} })).catch(err => console.error("Finance export audit warning:", err.message));
     
     if (format === "pdf") {
-      const pdf = minimalPdfBuffer("Sanad Thaki CFO Collection Report", [
-        `Total invoices: ${payload.summary.totalInvoices}`,
-        `Outstanding: ${payload.summary.outstandingAmount} SAR`,
-        `Paid: ${payload.summary.paidAmount} SAR`,
-        `Collection rate: ${payload.summary.collectionRate}%`
-      ]);
+      const pdf = generateProfessionalReportPdf(payload);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", "attachment; filename=finance-report.pdf");
       return res.send(pdf);

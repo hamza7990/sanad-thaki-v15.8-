@@ -21,7 +21,6 @@ import {
   Moon,
   Sun,
   Monitor,
-  Languages,
   Building2,
   ChevronDown,
   Menu,
@@ -130,8 +129,8 @@ export function AppShell({
         {/* Logo */}
         <div className="flex items-center h-16 px-4 border-b" style={{ borderColor: 'var(--sidebar-border)' }}>
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-sm">س</span>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+              <span className="text-white font-black text-base">س</span>
             </div>
             <AnimatePresence>
               {!sidebarCollapsed && (
@@ -141,11 +140,11 @@ export function AppShell({
                   exit={{ opacity: 0, width: 0 }}
                   className="overflow-hidden whitespace-nowrap"
                 >
-                  <p className="text-sm font-bold" style={{ color: 'var(--sidebar-text)' }}>
-                    {t('app.name')}
+                  <p className="text-sm font-black tracking-tight" style={{ color: 'var(--sidebar-active-text)' }}>
+                    سند ذكي
                   </p>
-                  <p className="text-xs" style={{ color: 'var(--sidebar-text-muted)' }}>
-                    {t('app.tagline')}
+                  <p className="text-[10px] leading-tight" style={{ color: 'var(--sidebar-text-muted)' }}>
+                    منصة تحصيل ومتابعة فواتير العملاء
                   </p>
                 </motion.div>
               )}
@@ -271,17 +270,7 @@ export function AppShell({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Language toggle */}
-            <button
-              onClick={() => onLocaleChange(locale === 'ar' ? 'en' : 'ar')}
-              className="h-9 px-3 rounded-lg border border-border bg-surface-1 hover:bg-surface-2 text-sm text-content-secondary inline-flex items-center gap-1.5 transition-colors"
-              aria-label="Toggle language"
-            >
-              <Languages className="w-4 h-4" />
-              <span className="hidden sm:inline">{locale === 'ar' ? 'EN' : 'عربي'}</span>
-            </button>
-
-            {/* Theme toggle */}
+            {/* Theme toggle only - language moved to Settings */}
             <button
               onClick={cycleTheme}
               className="h-9 w-9 rounded-lg border border-border bg-surface-1 hover:bg-surface-2 inline-flex items-center justify-center transition-colors"
@@ -297,7 +286,7 @@ export function AppShell({
                 <p className="text-sm font-medium text-content-primary leading-tight">{user.name}</p>
                 <p className="text-xs text-content-tertiary">{t(`users.role${user.role === 'FINANCE_MANAGER' ? 'FinanceManager' : user.role === 'ACCOUNTANT' ? 'Accountant' : user.role === 'SANAD_ADMIN' ? 'Admin' : 'Admin'}`)}</p>
               </div>
-              <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+              <div className="w-9 h-9 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300 flex items-center justify-center text-sm font-semibold flex-shrink-0">
                 {getInitials(user.name)}
               </div>
               <button
@@ -342,11 +331,11 @@ export function AppShell({
             >
               <div className="flex items-center justify-between h-16 px-4 border-b" style={{ borderColor: 'var(--sidebar-border)' }}>
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
-                    <span className="text-white font-bold text-sm">س</span>
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow">
+                    <span className="text-white font-black text-sm">س</span>
                   </div>
-                  <p className="text-sm font-bold" style={{ color: 'var(--sidebar-text)' }}>
-                    {t('app.name')}
+                  <p className="text-sm font-black" style={{ color: 'var(--sidebar-active-text)' }}>
+                    سند ذكي
                   </p>
                 </div>
                 <button

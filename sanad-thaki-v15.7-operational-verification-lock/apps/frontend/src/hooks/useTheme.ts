@@ -1,15 +1,17 @@
 import { useEffect } from 'react';
 import { useThemeStore } from '@/store/themeStore';
+import i18n from 'i18next';
 
 /**
  * useThemeEffect — Side-effect hook that synchronizes theme store state
- * with the DOM (data-theme, dir, lang attributes).
+ * with the DOM (data-theme, dir, lang attributes) and i18next locale.
  *
  * Must be called once near the root of the app (e.g. in App.tsx or a
  * top-level layout). It:
  *  1. Applies `data-theme="light|dark"` to `<html>`
  *  2. Listens for OS-level theme changes when theme='system'
  *  3. Sets `dir` and `lang` on `<html>` based on locale
+ *  4. Calls i18n.changeLanguage() to switch translations
  */
 export function useThemeEffect(): void {
   const theme = useThemeStore((s) => s.theme);
@@ -35,7 +37,7 @@ export function useThemeEffect(): void {
     }
   }, [theme, resolvedTheme]);
 
-  // ── Locale / direction attributes ────────────────────────────
+  // ── Locale / direction attributes + i18next ──────────────────
   useEffect(() => {
     const html = document.documentElement;
 
@@ -45,6 +47,11 @@ export function useThemeEffect(): void {
     } else {
       html.setAttribute('dir', 'ltr');
       html.setAttribute('lang', 'en');
+    }
+
+    // Sync i18next so translations actually change
+    if (i18n.language !== locale) {
+      i18n.changeLanguage(locale).catch(() => {});
     }
   }, [locale]);
 }

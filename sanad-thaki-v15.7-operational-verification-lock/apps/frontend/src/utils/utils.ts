@@ -5,43 +5,58 @@
 /**
  * Format a number as SAR currency.
  */
-export function formatCurrency(amount: number, locale = 'ar-SA'): string {
+export function formatCurrency(amount: number | null | undefined, locale = 'ar-SA'): string {
+  const val = Number(amount ?? 0);
+  if (isNaN(val)) return '—';
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'SAR',
     minimumFractionDigits: 2,
-  }).format(amount);
+  }).format(val);
 }
 
 /**
  * Format a date in short form (e.g. "٢٣ مايو ٢٠٢٥").
  */
-export function formatDate(date: string | Date, locale = 'ar-SA'): string {
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(date));
+export function formatDate(date: string | Date | null | undefined, locale = 'ar-SA'): string {
+  if (!date) return '—';
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '—';
+    return new Intl.DateTimeFormat(locale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(d);
+  } catch {
+    return '—';
+  }
 }
 
 /**
  * Format a date as a relative time string (e.g. "قبل ساعتين").
  */
-export function formatRelativeTime(date: string | Date, locale = 'ar-SA'): string {
-  const now = new Date();
-  const then = new Date(date);
-  const diffMs = now.getTime() - then.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHr / 24);
+export function formatRelativeTime(date: string | Date | null | undefined, locale = 'ar-SA'): string {
+  if (!date) return '—';
+  try {
+    const now = new Date();
+    const then = new Date(date);
+    if (isNaN(then.getTime())) return '—';
+    const diffMs = now.getTime() - then.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
 
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+    const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
 
-  if (diffDay > 0) return rtf.format(-diffDay, 'day');
-  if (diffHr > 0) return rtf.format(-diffHr, 'hour');
-  if (diffMin > 0) return rtf.format(-diffMin, 'minute');
-  return rtf.format(-diffSec, 'second');
+    if (diffDay > 0) return rtf.format(-diffDay, 'day');
+    if (diffHr > 0) return rtf.format(-diffHr, 'hour');
+    if (diffMin > 0) return rtf.format(-diffMin, 'minute');
+    return rtf.format(-diffSec, 'second');
+  } catch {
+    return '—';
+  }
 }
 
 /**

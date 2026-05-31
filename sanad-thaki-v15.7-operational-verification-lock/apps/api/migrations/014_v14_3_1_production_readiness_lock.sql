@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS security_audit_trail (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+DROP POLICY IF EXISTS security_audit_trail_company_isolation ON security_audit_trail;
+
 ALTER TABLE security_audit_trail
   ALTER COLUMN company_id TYPE text USING company_id::text,
   ALTER COLUMN actor_user_id TYPE text USING actor_user_id::text;

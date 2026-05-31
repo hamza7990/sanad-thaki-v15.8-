@@ -12,6 +12,31 @@
    ============================================================ */
 :root,
 [data-theme="light"] {
+  /* Brand Colors (Primary & Accent CSS Variables) - Professional Teal/Emerald Palette */
+  --color-primary-50: #f0fdfa;
+  --color-primary-100: #ccfbf1;
+  --color-primary-200: #99f6e4;
+  --color-primary-300: #5eead4;
+  --color-primary-400: #2dd4bf;
+  --color-primary-500: #14b8a6;
+  --color-primary-600: #0d9488;
+  --color-primary-700: #0f766e;
+  --color-primary-800: #115e59;
+  --color-primary-900: #134e4a;
+  --color-primary-950: #042f2e;
+
+  --color-accent-50: #ecfdf5;
+  --color-accent-100: #d1fae5;
+  --color-accent-200: #a7f3d0;
+  --color-accent-300: #6ee7b7;
+  --color-accent-400: #34d399;
+  --color-accent-500: #10b981;
+  --color-accent-600: #059669;
+  --color-accent-700: #047857;
+  --color-accent-800: #065f46;
+  --color-accent-900: #064e3b;
+  --color-accent-950: #022c22;
+
   /* Surface hierarchy */
   --surface-0: #f8fafc;     /* Page background */
   --surface-1: #ffffff;     /* Cards, panels */
@@ -27,7 +52,7 @@
   /* Border system */
   --border-primary: #e2e8f0;
   --border-secondary: #cbd5e1;
-  --border-focus: #2563eb;
+  --border-focus: #0d9488;
 
   /* Shadows */
   --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
@@ -39,8 +64,8 @@
   --sidebar-text: #e2e8f0;
   --sidebar-text-muted: #94a3b8;
   --sidebar-hover: #1e293b;
-  --sidebar-active: rgba(37, 99, 235, 0.15);
-  --sidebar-active-text: #60a5fa;
+  --sidebar-active: rgba(13, 148, 136, 0.15);
+  --sidebar-active-text: #2dd4bf;
   --sidebar-border: #1e293b;
 
   /* Overlay */
@@ -68,7 +93,7 @@
 
   --border-primary: #334155;
   --border-secondary: #475569;
-  --border-focus: #3b82f6;
+  --border-focus: #0d9488;
 
   --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
   --shadow-elevated: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
@@ -78,8 +103,8 @@
   --sidebar-text: #e2e8f0;
   --sidebar-text-muted: #64748b;
   --sidebar-hover: #1e293b;
-  --sidebar-active: rgba(59, 130, 246, 0.2);
-  --sidebar-active-text: #60a5fa;
+  --sidebar-active: rgba(13, 148, 136, 0.25);
+  --sidebar-active-text: #5eead4;
   --sidebar-border: #1e293b;
 
   --overlay-bg: rgba(0, 0, 0, 0.6);
@@ -204,3 +229,114 @@
     display: none;
   }
 }
+
+/* ============================================================
+   PRINT STYLES — Professional Executive PDF Reports
+   ============================================================ */
+@media print {
+  /* Hide screen-only interactive and navigation elements */
+  aside,
+  header,
+  nav,
+  button,
+  input,
+  select,
+  textarea,
+  .no-print,
+  .PageHeader__actions,
+  [aria-label="Toggle menu"],
+  [aria-label="Toggle language"] {
+    display: none !important;
+  }
+
+  /* Clean print-ready dimensions and backgrounds */
+  html,
+  body,
+  main,
+  #root,
+  .flex-1 {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Force grid-to-block or custom print grids */
+  .grid {
+    display: block !important;
+  }
+
+  /* Print container spacing */
+  main {
+    padding: 0.5cm !important;
+  }
+
+  /* Professional Typography adjustments */
+  h1, h2, h3, h4, h5, h6 {
+    color: #115e59 !important; /* Professional Teal/Emerald heading */
+  }
+
+  /* Table styling rules for enterprise quality */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-bottom: 1.5rem !important;
+    page-break-inside: auto !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 8px 12px !important;
+    font-size: 10pt !important;
+    font-weight: 700 !important;
+    text-align: right !important; /* Ensure perfect Arabic RTL alignment */
+  }
+
+  td {
+    border: 1px solid #e2e8f0 !important;
+    padding: 8px 12px !important;
+    font-size: 9.5pt !important;
+    color: #334155 !important;
+    text-align: right !important; /* Ensure perfect Arabic RTL alignment */
+  }
+
+  /* Enterprise cards in print mode */
+  .card,
+  .card-elevated {
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+    margin-bottom: 1.5rem !important;
+    padding: 0 !important;
+    border-radius: 0.5rem !important;
+    page-break-inside: avoid !important;
+  }
+
+  .card-content {
+    padding: 1.25rem !important;
+  }
+
+  /* Custom page setup */
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm 1.2cm 1.5cm 1.2cm;
+  }
+
+  /* Force colors to print correctly in WebKit/Blink browsers */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+

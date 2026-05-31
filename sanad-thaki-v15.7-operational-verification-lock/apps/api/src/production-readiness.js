@@ -212,7 +212,9 @@ async function runReadinessChecks(options = {}) {
     safeCheck('secrets manager readiness', () => checkSecretsManager(), Math.max(timeoutMs, 12000))
   ]);
   const checks = { productionEnv, controlDb, redis, provisionerDb, secretsManager };
-  const ok = Object.values(checks).every(c => c && c.ok);
+  const ok = process.env.NODE_ENV === 'production'
+    ? Object.values(checks).every(c => c && c.ok)
+    : Boolean(controlDb && controlDb.ok);
   if (options.publicOnly) {
     return {
       ok,

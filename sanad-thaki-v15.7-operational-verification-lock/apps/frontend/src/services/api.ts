@@ -332,13 +332,35 @@ export const apiService = {
   },
 
   uploadInvoiceFile(file: File) {
-    const formData = new FormData();
-    formData.append('file', file);
-    return httpFormData<{ jobId: string }>('/invoices/read-file', formData);
+    return new Promise<{ jobId: string }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const dataUrl = reader.result as string;
+          const res = await http<{ jobId: string }>('/invoices/read-file', {
+            method: 'POST',
+            body: JSON.stringify({
+              fileName: file.name,
+              mimeType: file.type,
+              dataUrl: dataUrl
+            })
+          });
+          resolve(res);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  },
+
+  getProcessingJobs() {
+    return http<{ jobs: ProcessingJob[] }>('/invoices/jobs').then(res => res.jobs ?? []);
   },
 
   getProcessingJob(jobId: string) {
-    return http<ProcessingJob>(`/invoices/jobs/${jobId}`);
+    return http<{ job: ProcessingJob }>(`/invoices/jobs/${jobId}`).then(res => res.job);
   },
 
   createBatchInvoices(invoices: InvoiceCreateRequest[]) {

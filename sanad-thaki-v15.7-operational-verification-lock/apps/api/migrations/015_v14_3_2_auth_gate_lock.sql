@@ -35,7 +35,7 @@ ALTER TABLE platform_admins
 ALTER TABLE app_users
   DROP CONSTRAINT IF EXISTS app_users_role_check;
 ALTER TABLE app_users
-  ADD CONSTRAINT app_users_role_check CHECK (role IN ('ADMIN','FINANCE_MANAGER','ACCOUNTANT'));
+  ADD CONSTRAINT app_users_role_check CHECK (role IN ('OWNER','ADMIN','MEMBER','FINANCE_MANAGER','ACCOUNTANT'));
 
 -- Make it explicit that a platform admin row never belongs to a tenant.
 -- Tenant company IDs are validated at application authentication middleware and RLS layer.
