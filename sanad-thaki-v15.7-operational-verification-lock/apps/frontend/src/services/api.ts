@@ -391,11 +391,12 @@ export const apiService = {
     return Array.isArray(res) ? res : ((res as any).transactions ?? []);
   },
 
-  createBankTransaction(data: CreateBankTransactionRequest) {
-    return http<BankTransaction>('/bank/transactions', {
+  async createBankTransaction(data: CreateBankTransactionRequest) {
+    const res = await http<{ transaction: BankTransaction }>('/bank/transactions', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+    return res.transaction;
   },
 
   uploadBankStatement(file: File, bankKey?: string) {

@@ -2842,7 +2842,19 @@ function mapMatchToCamel(row) {
     bankDescription: row.bank_description,
     bank_description: row.bank_description,
     bankAmount: row.bank_amount ? Number(row.bank_amount) : null,
-    bank_amount: row.bank_amount ? Number(row.bank_amount) : null
+    bank_amount: row.bank_amount ? Number(row.bank_amount) : null,
+    invoice: {
+      id: row.invoice_id,
+      invoiceNumber: row.invoice_number,
+      customerName: row.customer_name,
+      totalAmount: row.total_amount ? Number(row.total_amount) : 0,
+    },
+    bankTransaction: {
+      id: row.bank_transaction_id,
+      amount: row.bank_amount ? Number(row.bank_amount) : 0,
+      transactionDate: row.transaction_date,
+      description: row.bank_description,
+    }
   };
 }
 
@@ -3071,7 +3083,7 @@ app.post(
       await writeAudit(client, req, "CREATE_BANK_TRANSACTION", "bank_transaction", tx.rows[0].id);
       return tx.rows[0];
     });
-    res.json({ transaction: result });
+    res.json({ transaction: mapBankTransactionToCamel(result) });
   }
 );
 
@@ -3263,7 +3275,7 @@ app.post(
     const result = await withTenant(req.companyId, async client => {
       return runBankMatchingForCompany(client, req, req.companyId);
     });
-    res.json(result);
+    res.json({ ...result, matchesFound: result.created });
   }
 );
 
