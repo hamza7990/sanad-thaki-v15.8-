@@ -377,9 +377,10 @@ export const apiService = {
     });
   },
 
-  sendWhatsApp(invoiceId: string) {
+  sendWhatsApp(invoiceId: string, reminderStage: 'FIRST' | 'SECOND' | 'FINAL' = 'FIRST') {
     return http<void>(`/invoices/${invoiceId}/whatsapp/send`, {
       method: 'POST',
+      body: JSON.stringify({ reminderStage }),
     });
   },
 

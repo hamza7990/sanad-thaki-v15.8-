@@ -43,3 +43,7 @@ apps/api/check_tenant_registry.mjs
 apps/api/find_alter_column.mjs
 apps/api/migrate_all_tenant_dbs.mjs
 *.tsbuildinfo
+
+# Whitelist source directories
+!apps/frontend/src/features/invoices/
+
