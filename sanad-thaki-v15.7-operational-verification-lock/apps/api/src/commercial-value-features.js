@@ -758,11 +758,18 @@ function installCommercialValueFeatures(app, deps) {
     const parsed = schema.safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: "مرحلة التذكير غير صحيحة", details: parsed.error.issues });
     const result = await withTenant(req.companyId, async client => {
-      const inv = await client.query("SELECT id, invoice_number, customer_name, customer_phone, total_amount, status FROM invoices WHERE id=$1 AND company_id=$2", [req.params.id, req.companyId]);
+      const inv = await client.query("SELECT id, invoice_number, customer_name, customer_phone, total_amount, status, supplier_tax_number FROM invoices WHERE id=$1 AND company_id=$2", [req.params.id, req.companyId]);
       const invoice = inv.rows[0];
       if (!invoice) return { error: "NOT_FOUND" };
       if (invoice.status !== "APPROVED") return { error: "NOT_APPROVED" };
+      
+      // Enforce field completeness validations
+      if (!invoice.invoice_number || invoice.invoice_number.trim() === "") return { error: "MISSING_INVOICE_NUMBER" };
+      if (!invoice.customer_name || invoice.customer_name.trim() === "") return { error: "MISSING_CUSTOMER_NAME" };
+      if (!invoice.supplier_tax_number || invoice.supplier_tax_number.trim() === "") return { error: "MISSING_SUPPLIER_TAX_NUMBER" };
+      if (!invoice.total_amount || Number(invoice.total_amount) <= 0) return { error: "INVALID_TOTAL_AMOUNT" };
       if (!normalizePhone(invoice.customer_phone)) return { error: "MISSING_CUSTOMER_PHONE" };
+
       const s = await client.query("SELECT provider FROM whatsapp_business_settings WHERE company_id=$1 AND is_active=true", [req.companyId]);
       if (!s.rowCount) return { error: "MISSING_SETTINGS" };
       const provider = s.rows[0].provider || "meta";
@@ -770,8 +777,23 @@ function installCommercialValueFeatures(app, deps) {
       if (!t.rowCount) return { error: "MISSING_TEMPLATE" };
       const duplicate = await client.query("SELECT id FROM whatsapp_reminder_events WHERE company_id=$1 AND invoice_id=$2 AND reminder_stage=$3 AND status IN ('QUEUED','SENT','DELIVERED','READ') LIMIT 1", [req.companyId, req.params.id, parsed.data.reminderStage]);
       if (duplicate.rowCount) return { error: "DUPLICATE_STAGE" };
+      
       const message = t.rows[0].body_preview;
-      const wa = await client.query(`INSERT INTO whatsapp_messages (company_id, invoice_id, sent_by, message, status, mode, to_phone, reminder_stage, provider, delivery_status, next_attempt_at) VALUES ($1,$2,$3,$4,'QUEUED','company-whatsapp',$5,$6,$7,'QUEUED',now()) RETURNING *`, [req.companyId, req.params.id, req.user.id, message, normalizePhone(invoice.customer_phone), parsed.data.reminderStage, provider]);
+      const customerId = invoice.customer_phone ? "cust_" + invoice.customer_phone.replace(/[^0-9]/g, "") : "cust_" + Buffer.from(invoice.customer_name).toString("hex").slice(0, 10);
+      const reminderAttemptNumber = parsed.data.reminderStage === "FIRST" ? 1 : parsed.data.reminderStage === "SECOND" ? 2 : 3;
+
+      // Insert with all required snapshot fields
+      const wa = await client.query(`
+        INSERT INTO whatsapp_messages (
+          company_id, invoice_id, sent_by, message, status, mode, to_phone, reminder_stage, provider, delivery_status, next_attempt_at,
+          invoice_number, customer_id, customer_name, customer_phone, total_amount, sender_user_id, reminder_attempt_number, message_content
+        ) VALUES ($1,$2,$3,$4,'QUEUED','company-whatsapp',$5,$6,$7,'QUEUED',now(),$8,$9,$10,$11,$12,$13,$14,$15)
+        RETURNING *
+      `, [
+        req.companyId, req.params.id, req.user.id, message, normalizePhone(invoice.customer_phone), parsed.data.reminderStage, provider,
+        invoice.invoice_number, customerId, invoice.customer_name, normalizePhone(invoice.customer_phone), invoice.total_amount, req.user.id, reminderAttemptNumber, message
+      ]);
+
       await client.query("INSERT INTO whatsapp_reminder_events (company_id, invoice_id, whatsapp_message_id, reminder_stage, status, requested_by) VALUES ($1,$2,$3,$4,'QUEUED',$5)", [req.companyId, req.params.id, wa.rows[0].id, parsed.data.reminderStage, req.user.id]);
       await recordTenantUsage(client, req.companyId, "whatsapp_message_queued", 1, { invoiceId: req.params.id, stage: parsed.data.reminderStage });
       await writeAudit(client, req, "QUEUE_WHATSAPP_REMINDER", "invoice", req.params.id, { stage: parsed.data.reminderStage });
@@ -780,6 +802,10 @@ function installCommercialValueFeatures(app, deps) {
     });
     if (result.error === "NOT_FOUND") return res.status(404).json({ error: "الفاتورة غير موجودة" });
     if (result.error === "NOT_APPROVED") return res.status(403).json({ error: "لا يمكن إرسال واتساب قبل اعتماد المدير المالي" });
+    if (result.error === "MISSING_INVOICE_NUMBER") return res.status(400).json({ error: "رقم الفاتورة غير مكتمل. حدّث بيانات الفاتورة أولًا." });
+    if (result.error === "MISSING_CUSTOMER_NAME") return res.status(400).json({ error: "اسم العميل غير مكتمل. حدّث بيانات الفاتورة أولًا." });
+    if (result.error === "MISSING_SUPPLIER_TAX_NUMBER") return res.status(400).json({ error: "الرقم الضريبي للمورد غير مكتمل. حدّث بيانات الفاتورة أولًا." });
+    if (result.error === "INVALID_TOTAL_AMOUNT") return res.status(400).json({ error: "مبلغ الفاتورة يجب أن يكون أكبر من الصفر." });
     if (result.error === "MISSING_CUSTOMER_PHONE") return res.status(400).json({ error: "لا يوجد رقم واتساب محفوظ للعميل في الفاتورة. حدّث بيانات الفاتورة أولًا." });
     if (result.error === "MISSING_SETTINGS") return res.status(400).json({ error: "إعدادات WhatsApp Business لهذه الشركة غير مكتملة." });
     if (result.error === "MISSING_TEMPLATE") return res.status(400).json({ error: "لا يوجد قالب Meta معتمد لهذه المرحلة." });

@@ -3368,11 +3368,21 @@ app.get(
 );
 
 app.get("/support/tickets", authRequired, requirePermission(Permissions.SUPPORT_SUBMIT), async (req, res) => {
-  const canManage = req.user.role === "ADMIN";
-  const result = await withTenant(req.companyId, client =>
-    client.query("SELECT * FROM support_tickets WHERE company_id=$1 ORDER BY created_at DESC LIMIT 100", [req.companyId])
-  );
-  res.json({ canManage, tickets: result.rows });
+  const isCompanyAdmin = req.user.role === "OWNER" || req.user.role === "ADMIN";
+  const result = await withTenant(req.companyId, client => {
+    if (isCompanyAdmin) {
+      return client.query(
+        "SELECT * FROM support_tickets WHERE company_id=$1 ORDER BY created_at DESC LIMIT 100",
+        [req.companyId]
+      );
+    } else {
+      return client.query(
+        "SELECT * FROM support_tickets WHERE company_id=$1 AND created_by=$2 ORDER BY created_at DESC LIMIT 100",
+        [req.companyId, req.user.id]
+      );
+    }
+  });
+  res.json({ canManage: isCompanyAdmin, tickets: result.rows });
 });
 
 app.post(

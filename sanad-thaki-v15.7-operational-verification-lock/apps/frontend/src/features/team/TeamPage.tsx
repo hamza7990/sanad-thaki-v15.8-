@@ -58,12 +58,12 @@ export default function TeamPage() {
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.email.trim()) {
-      notify.error('خطأ', 'يرجى ملء جميع الحقول المطلوبة');
+    if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
+      notify.error('خطأ', 'يرجى ملء جميع الحقول المطلوبة بما في ذلك كلمة المرور');
       return;
     }
 
-    if (form.password && form.password.trim().length < 12) {
+    if (form.password.trim().length < 12) {
       notify.error('خطأ', 'يجب أن تتكون كلمة المرور من 12 خانة على الأقل');
       return;
     }
@@ -74,19 +74,15 @@ export default function TeamPage() {
         name: form.name.trim(),
         email: form.email.trim(),
         role: form.role,
-        password: form.password.trim() || undefined
+        password: form.password.trim()
       });
-      if (form.password.trim()) {
-        notify.success('تم إنشاء الحساب', 'تم إنشاء حساب الموظف بنجاح بكلمة المرور المحددة');
-      } else {
-        notify.success('تم إرسال الدعوة', 'تم إرسال رابط تفعيل الحساب إلى البريد الإلكتروني بنجاح');
-      }
+      notify.success('تم إنشاء الحساب', 'تم إنشاء حساب الموظف بنجاح بكلمة المرور المحددة');
       setShowInviteModal(false);
       setForm({ name: '', email: '', role: 'MEMBER', password: '' });
       fetchUsers();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'فشل إرسال الدعوة للمستخدم';
-      notify.error('خطأ في إرسال الدعوة', message);
+      const message = err instanceof ApiError ? err.message : 'فشل إنشاء حساب الموظف';
+      notify.error('خطأ في إنشاء الحساب', message);
     } finally {
       setSubmitting(false);
     }
@@ -335,7 +331,7 @@ export default function TeamPage() {
         actions={
           <Button onClick={() => setShowInviteModal(true)} variant="primary">
             <UserPlus size={16} className="me-2" />
-            دعوة مستخدم جديد
+            إضافة موظف جديد
           </Button>
         }
       />
@@ -364,7 +360,7 @@ export default function TeamPage() {
       <Modal
         open={showInviteModal}
         onClose={() => setShowInviteModal(false)}
-        title="دعوة موظف جديد للفريق"
+        title="إنشاء حساب موظف جديد"
       >
         <form onSubmit={handleInvite} className="flex flex-col gap-4">
           <Input
@@ -401,12 +397,13 @@ export default function TeamPage() {
           />
 
           <Input
-            label="كلمة المرور للحساب الجديد (اختياري)"
+            label="كلمة المرور الابتدائية (مطلوبة)"
             type="password"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="أدخل كلمة مرور (حد أدنى 12 خانة) أو اتركها فارغة للإرسال بالبريد"
+            placeholder="أدخل كلمة مرور الحساب مباشرة (حد أدنى 12 خانة)"
             disabled={submitting}
+            required
             minLength={12}
           />
 
@@ -433,7 +430,7 @@ export default function TeamPage() {
               variant="primary"
               loading={submitting}
             >
-              إرسال الدعوة
+              إنشاء الحساب مباشرة
             </Button>
           </div>
         </form>

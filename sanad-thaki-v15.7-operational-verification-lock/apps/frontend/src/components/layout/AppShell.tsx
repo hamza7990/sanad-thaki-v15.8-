@@ -42,13 +42,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { key: 'dashboard', path: '/dashboard', icon: LayoutDashboard, labelKey: 'nav.dashboard', roles: ['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT', 'SANAD_ADMIN'] },
+  { key: 'dashboard', path: '/dashboard', icon: LayoutDashboard, labelKey: 'nav.dashboard', roles: ['OWNER', 'ADMIN', 'MEMBER', 'ACCOUNTANT'] },
   { key: 'invoices', path: '/invoices', icon: FileText, labelKey: 'nav.invoices', roles: ['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT'] },
-  { key: 'ocr', path: '/ocr', icon: ScanLine, labelKey: 'nav.ocr', roles: ['OWNER', 'MEMBER', 'ACCOUNTANT', 'FINANCE_MANAGER'] },
+  { key: 'ocr', path: '/ocr', icon: ScanLine, labelKey: 'nav.ocr', roles: ['OWNER', 'MEMBER', 'ACCOUNTANT'] },
   { key: 'bank', path: '/bank', icon: Landmark, labelKey: 'nav.bankOperations', roles: ['OWNER', 'FINANCE_MANAGER'] },
   { key: 'reconciliation', path: '/reconciliation', icon: ArrowLeftRight, labelKey: 'nav.reconciliation', roles: ['OWNER', 'FINANCE_MANAGER'] },
   { key: 'reports', path: '/reports', icon: BarChart3, labelKey: 'nav.reports', roles: ['OWNER', 'FINANCE_MANAGER', 'ADMIN'] },
-  { key: 'whatsapp', path: '/whatsapp', icon: MessageCircle, labelKey: 'nav.whatsapp', roles: ['OWNER', 'ACCOUNTANT', 'FINANCE_MANAGER'] },
+  { key: 'whatsapp', path: '/whatsapp', icon: MessageCircle, labelKey: 'nav.whatsapp', roles: ['OWNER', 'ACCOUNTANT'] },
   { key: 'users', path: '/users', icon: Users, labelKey: 'nav.users', roles: ['OWNER', 'ADMIN'] },
   { key: 'settings', path: '/settings', icon: Settings, labelKey: 'nav.settings', roles: ['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT', 'SANAD_ADMIN'] },
   { key: 'billing', path: '/billing', icon: CreditCard, labelKey: 'nav.billing', roles: ['OWNER', 'ADMIN'] },

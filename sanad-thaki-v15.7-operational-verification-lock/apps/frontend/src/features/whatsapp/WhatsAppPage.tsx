@@ -194,6 +194,23 @@ export default function WhatsAppPage() {
         description="اربط حساب Meta Business الخاص بك وأرسل تذكيرات الدفع للعملاء آلياً"
       />
 
+      <Card className="border-primary-100 bg-primary-50/10 dark:bg-primary-950/5">
+        <CardContent className="p-4 text-sm text-content-secondary space-y-2">
+          <p className="font-bold text-content-primary flex items-center gap-1.5">
+            <MessageSquare size={16} className="text-primary-600" />
+            بوابة المتابعة الآلية وتحصيل المدفوعات (WhatsApp Collection Hub)
+          </p>
+          <p className="text-xs text-content-secondary">
+            هذا القسم مخصص حصرياً لمتابعة تحصيل فواتير العملاء المتعثرة وإرسال التذكيرات الدورية وإدارتها. 
+            <strong> هذا النظام ليس منصة محادثة عامة أو دعم فني داخلي.</strong>
+          </p>
+          <p className="text-xs text-content-tertiary">
+            دورة العمل المعتمدة للتحصيل:
+            <span className="font-semibold text-content-secondary"> 1. يقوم المحاسب برفع الفاتورة ➔ 2. يعتمدها المدير المالي ➔ 3. تظهر تلقائياً هنا في بوابة الواتساب ➔ 4. يرسل المحاسب التذكير للعميل ➔ 5. يتم السداد وتطابق الدفعة بنكياً لإغلاق الفاتورة.</span>
+          </p>
+        </CardContent>
+      </Card>
+
       <Tabs
         tabs={[
           { key: 'settings', label: 'إعدادات الاتصال والربط', icon: Settings },

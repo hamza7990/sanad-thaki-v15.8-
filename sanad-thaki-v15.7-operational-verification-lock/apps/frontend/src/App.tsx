@@ -50,7 +50,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
+    const fallback = user.role === 'SANAD_ADMIN' ? '/platform' : user.role === 'FINANCE_MANAGER' ? '/invoices' : '/dashboard';
+    return <Navigate to={fallback} replace />;
   }
 
   return (
@@ -77,6 +78,17 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
   );
 };
 
+const NavigateDefault = () => {
+  const { user } = useAuth();
+  if (user?.role === 'SANAD_ADMIN') {
+    return <Navigate to="/platform" replace />;
+  }
+  if (user?.role === 'FINANCE_MANAGER') {
+    return <Navigate to="/invoices" replace />;
+  }
+  return <Navigate to="/dashboard" replace />;
+};
+
 export const App: React.FC = () => {
   // Synchronize theme store state with DOM (lang, dir, class)
   useThemeEffect();
@@ -95,7 +107,7 @@ export const App: React.FC = () => {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['OWNER', 'ADMIN', 'MEMBER', 'FINANCE_MANAGER', 'ACCOUNTANT', 'SANAD_ADMIN']}>
+              <ProtectedRoute allowedRoles={['OWNER', 'ADMIN', 'MEMBER', 'ACCOUNTANT']}>
                 <DashboardPage />
               </ProtectedRoute>
             }
@@ -111,7 +123,7 @@ export const App: React.FC = () => {
           <Route
             path="/ocr"
             element={
-              <ProtectedRoute allowedRoles={['OWNER', 'MEMBER', 'ACCOUNTANT', 'FINANCE_MANAGER']}>
+              <ProtectedRoute allowedRoles={['OWNER', 'MEMBER', 'ACCOUNTANT']}>
                 <OcrCenterPage />
               </ProtectedRoute>
             }
@@ -143,7 +155,7 @@ export const App: React.FC = () => {
           <Route
             path="/whatsapp"
             element={
-              <ProtectedRoute allowedRoles={['OWNER', 'ACCOUNTANT', 'FINANCE_MANAGER']}>
+              <ProtectedRoute allowedRoles={['OWNER', 'ACCOUNTANT']}>
                 <WhatsAppPage />
               </ProtectedRoute>
             }
@@ -206,7 +218,7 @@ export const App: React.FC = () => {
           />
 
           {/* Default Routing fallback */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<NavigateDefault />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

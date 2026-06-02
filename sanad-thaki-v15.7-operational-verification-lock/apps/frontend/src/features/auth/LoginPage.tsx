@@ -21,6 +21,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const notify = useNotification();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
 
   const [mode, setMode] = useState<'login' | 'forgot' | 'reset'>('login');
   const [email, setEmail] = useState('');
@@ -34,10 +35,11 @@ export default function LoginPage() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/dashboard', { replace: true });
+    if (isAuthenticated && user) {
+      const destination = user.role === 'SANAD_ADMIN' ? '/platform' : user.role === 'FINANCE_MANAGER' ? '/invoices' : '/dashboard';
+      navigate(destination, { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user, navigate]);
 
   // Page title
   useEffect(() => {
@@ -62,9 +64,10 @@ export default function LoginPage() {
 
       setLoading(true);
       try {
-        await login(email.trim(), password);
+        const res = await login(email.trim(), password);
         notify.success(t('auth.loginSuccess'), t('auth.welcomeBack'));
-        navigate('/dashboard', { replace: true });
+        const destination = res?.user?.role === 'SANAD_ADMIN' ? '/platform' : res?.user?.role === 'FINANCE_MANAGER' ? '/invoices' : '/dashboard';
+        navigate(destination, { replace: true });
       } catch (err) {
         const message = err instanceof ApiError ? err.message : t('auth.loginError');
         setError(message);
