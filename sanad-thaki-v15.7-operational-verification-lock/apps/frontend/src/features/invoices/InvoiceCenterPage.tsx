@@ -50,7 +50,9 @@ interface InvoiceDetailModalProps {
 
 function InvoiceDetailModal({ invoice, open, onClose, onApprove, onSubmitReview, onRefresh }: InvoiceDetailModalProps) {
   const notify = useNotification();
+  const user = useAuthStore(s => s.user);
   const [approving, setApproving] = useState(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
   const [detail, setDetail] = useState<Invoice | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
@@ -69,13 +71,11 @@ function InvoiceDetailModal({ invoice, open, onClose, onApprove, onSubmitReview,
   const inv = detail ?? invoice;
   if (!inv) return null;
 
-  const user = useAuthStore(s => s.user);
   const canApproveInvoice = user?.role === 'OWNER' || user?.role === 'FINANCE_MANAGER';
   const canApprove = canApproveInvoice && (inv.status === 'NEEDS_REVIEW' || inv.status === 'READY_FOR_REVIEW' || inv.status === 'DRAFT');
 
   const canSubmitInvoice = user?.role === 'OWNER' || user?.role === 'ACCOUNTANT' || user?.role === 'MEMBER';
   const canSubmit = canSubmitInvoice && inv.status === 'DRAFT';
-  const [submittingReview, setSubmittingReview] = useState(false);
 
   const handleApprove = async () => {
     setApproving(true);
@@ -336,27 +336,40 @@ export default function InvoiceCenterPage() {
   const fetchInvoices = useCallback(async () => {
     try {
       setLoading(true);
-      const params: Record<string, string> = {
-        page: String(page),
-        pageSize: String(pageSize),
-      };
-      if (activeTab !== 'ALL') params.status = activeTab;
-      if (searchQuery) params.search = searchQuery;
-
-      const result = await apiService.getInvoices(params);
+      const result = await apiService.getInvoices();
       if (Array.isArray(result)) {
         setInvoices(result);
-        setTotal(result.length);
       } else {
         setInvoices(result.data || []);
-        setTotal(result.total || 0);
       }
     } catch (err) {
       notify.error(t('common.error'), String(err));
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, activeTab, searchQuery, t, notify]);
+  }, [t, notify]);
+
+  // Client-side filtering & searching
+  const processedInvoices = useMemo(() => {
+    let result = [...invoices];
+    if (activeTab !== 'ALL') {
+      result = result.filter(inv => inv.status === activeTab);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(inv =>
+        (inv.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(q)) ||
+        (inv.customerName && inv.customerName.toLowerCase().includes(q))
+      );
+    }
+    return result;
+  }, [invoices, activeTab, searchQuery]);
+
+  // Client-side pagination
+  const paginatedInvoices = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return processedInvoices.slice(start, start + pageSize);
+  }, [processedInvoices, page, pageSize]);
 
   useEffect(() => {
     fetchInvoices();
@@ -606,7 +619,7 @@ export default function InvoiceCenterPage() {
         {/* DataTable — rows are clickable */}
         <DataTable
           columns={columns}
-          data={invoices}
+          data={paginatedInvoices}
           keyExtractor={(row) => row.id}
           selectable
           selectedKeys={selectedKeys}
@@ -617,7 +630,7 @@ export default function InvoiceCenterPage() {
           pagination
           pageSize={pageSize}
           currentPage={page}
-          totalItems={total}
+          totalItems={processedInvoices.length}
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
           exportable
